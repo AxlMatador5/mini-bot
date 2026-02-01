@@ -21,8 +21,8 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
     console.error('Please set SUPABASE_URL and SUPABASE_KEY in your .env file');
     console.error('');
     console.error('Example .env file:');
-    console.error('SUPABASE_URL=https://your-project-id.supabase.co');
-    console.error('SUPABASE_KEY=your-supabase-anon-key');
+    console.error('SUPABASE_URL=https://gfjhbkndzcarcfvgvcbi.supabase.co');
+    console.error('SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdmamhia25kemNhcmNmdmd2Y2JpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk5NjE3MzgsImV4cCI6MjA4NTUzNzczOH0.eXbtoxbbZgbWhrvthMHRnNaKt_LPAdy17kE9kMw9pZA');
     console.error('PORT=3000');
     process.exit(1);
 }
