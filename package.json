@@ -1,23 +1,12 @@
 {
-  "name": "abZtech_MD",
+  "name": "whatsapp-multi-session",
   "version": "1.0.0",
-  "description": "AbZtech WhatsApp Bot - Multi Session",
+  "description": "Multi-session WhatsApp bot with Supabase",
   "main": "index.js",
-  "type": "commonjs",
   "scripts": {
-    "bot": "npx pm2 start index.js --attach --no-daemon",
     "start": "node index.js",
     "dev": "nodemon index.js"
   },
-  "author": "AbZtech",
-  "license": "MIT",
-  "private": true,
-  "keywords": [
-    "whatsapp-bot",
-    "baileys",
-    "multi-session",
-    "supabase"
-  ],
   "dependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc.6",
     "@supabase/supabase-js": "^2.39.7",
@@ -25,10 +14,10 @@
     "qrcode": "^1.5.1",
     "express": "^4.18.2",
     "cors": "^2.8.5",
-    "body-parser": "^1.20.2"
+    "dotenv": "^16.3.1",
+    "@hapi/boom": "^10.0.1"
   },
-  "devDependencies": {
-    "pm2": "^5.3.0",
-    "nodemon": "^3.0.3"
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
