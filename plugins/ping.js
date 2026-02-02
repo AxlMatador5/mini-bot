@@ -6,16 +6,19 @@ module.exports = {
     description: 'Check bot response speed',
 
     async execute(sock, m, args) {
-        const start = Date.now();
-        await m.reply('Pinging...');
-        const latency = Date.now() - start;
-        const info = `> Latency: ${latency} ms`;
-        const imgUrl = 'https://i.ibb.co/65fwTVG/carbon-3.png';
-        const author = 'ABZTech';
-        const botname = 'ABZTech ᴍᴜʟᴛɪᴅᴇᴠɪᴄᴇ';
-        const sourceUrl = 'https://abztech.xyz/';
-
         try {
+            // Send reaction first
+            await m.react('⏱️');
+            
+            const start = Date.now();
+            await m.reply('Pinging...');
+            const latency = Date.now() - start;
+            const info = `> Pong: ${latency} ms`;
+            const imgUrl = 'https://i.ibb.co/39GRRMX2/img-2m0cfk6r.jpg';
+            const author = 'marisel';
+            const botname = 'Mercedes';
+            const sourceUrl = 'karenbishop.online';
+
             const thumbnailBuffer = (await axios.get(imgUrl, { responseType: 'arraybuffer' })).data;
 
             await m.send(info, {
@@ -32,8 +35,18 @@ module.exports = {
                     }
                 }
             });
+            
+            // Send success reaction after completion
+            await m.react('✅');
+            
         } catch (err) {
             console.error('Error sending ping info:', err);
+            // Send error reaction if something goes wrong
+            try {
+                await m.react('❌');
+            } catch (e) {
+                console.error('Could not send error reaction:', e);
+            }
         }
     }
 };
