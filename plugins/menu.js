@@ -59,6 +59,13 @@ module.exports = {
 *┃* ᪣ ${prefix}couplepp
 *┃* ᪣ ${prefix}arise
 *┃* ᪣ ${prefix}tagall1
+*┃* ᪣ ${prefix}kick
+*┃* ᪣ ${prefix}promote
+*┃* ᪣ ${prefix}demote
+*┃* ᪣ ${prefix}lock
+*┃* ᪣ ${prefix}open
+*┃* ᪣ ${prefix}groupinfo
+*┃* ᪣ ${prefix}add
 *┗──────────────⊷*
 
 *┏───〘 🔧 OWNER COMMANDS 〙───⊷*
