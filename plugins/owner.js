@@ -26,19 +26,14 @@ module.exports = {
             
             const text = `*MERCEDES BOT CREATOR*\n\n` +
                          `*Bot:* Mercedes WhatsApp Bot\n` +
-                         `*Developer:* ${creator.name}\n` +
-                         `*Phone:* ${creator.formattedPhone}\n` +
-                         `*Email:* ${creator.email}\n` +
-                         `*Website:* ${creator.website}\n` +
-                         `*GitHub:* ${creator.github}\n\n` +
                          `*Role:* ${creator.role}\n\n` +
                          `_For bot support, customization, or collaborations_\n` +
                          `_Contact via any of the options below:_`;
 
             await sendInteractiveMessage(sock, m.from, {
-                title: 'CONTACT DEVELOPER',
+                title: 'CONTACT MARISEL',
                 text: text,
-                footer: 'Mercedes Bot | Premium WhatsApp Automation',
+                footer: 'Mercedes',
                 interactiveButtons: [
                     {
                         name: 'cta_url',
