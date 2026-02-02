@@ -9,7 +9,6 @@ module.exports = {
 
     async execute(sock, m) {
         try {
-            // Send initial reaction
             await m.react('📋');
             
             const prefix = global.BOT_PREFIX || '.';
@@ -24,56 +23,57 @@ module.exports = {
             const usedMemory = Math.round((os.totalmem() - os.freemem()) / (1024 * 1024 * 1024) * 100) / 100;
             const number = m.sender.split('@')[0] || 'Unknown';
             
-            // Categories of commands
-            const categories = {
-                'core': [
-                    `${prefix}ping - Check bot response speed`,
-                    `${prefix}uptime - View bot running time`,
-                    `${prefix}creator - Contact developer`,
-                    `${prefix}menu - Show this menu`,
-                    `${prefix}help - Get command help`,
-                    `${prefix}alive - Check if bot is online`
-                ],
-                'utility': [
-                    `${prefix}sticker - Create sticker from image`,
-                    `${prefix}ocr - Extract text from images`,
-                    `${prefix}tts - Convert text to speech`,
-                    `${prefix}ai - Chat with AI assistant`,
-                    `${prefix}ai-search - Search with AI`,
-                    `${prefix}gstatus - Group status info`,
-                    `${prefix}speed - Test connection speed`
-                ],
-                'group': [
-                    `${prefix}tagall - Mention all members`,
-                    `${prefix}tagme - Tag yourself`,
-                    `${prefix}tagname - Tag with custom name`,
-                    `${prefix}poll - Create a poll`,
-                    `${prefix}couplepp - Show couple profile`,
-                    `${prefix}arise - Wake up the bot`
-                ],
-                'owner': [
-                    `${prefix}exec - Execute JavaScript code`,
-                    `${prefix}> - Quick code execution`,
-                    `${prefix}eval - Evaluate code`
-                ]
-            };
-
-            // Main menu text with statistics box
             const menuText = 
 `*┏───〘 🚗 ᴍᴇʀᴄᴇᴅᴇs ᴍᴇɴᴜ 〙───⊷*
-*┃*  *BOT STATISTICS*
+*┃*  *Bot name: Mercedes*
 *┃* Uptime: ${hours}h ${minutes}m ${seconds}s
 *┃* Memory: ${usedMemory}GB / ${totalMemory}GB
 *┃* Your Number: ${number}
 *┃* Prefix: ${prefix}
 *┗──────────────⊷*
 
-*📋 SELECT A CATEGORY:*
-_Smooth as a Mercedes engine_`;
+*┏───〘 🚗 CORE COMMANDS 〙───⊷*
+*┃* ᪣ ${prefix}ping
+*┃* ᪣ ${prefix}uptime
+*┃* ᪣ ${prefix}creator
+*┃* ᪣ ${prefix}menu
+*┃* ᪣ ${prefix}help
+*┃* ᪣ ${prefix}alive
+*┗──────────────⊷*
 
-            const imgUrl = 'https://i.ibb.co/39GRRMX2/img-2m0cfk6r.jpg';
+*┏───〘 🛠️ UTILITY COMMANDS 〙───⊷*
+*┃* ᪣ ${prefix}sticker
+*┃* ᪣ ${prefix}ocr
+*┃* ᪣ ${prefix}tts
+*┃* ᪣ ${prefix}ai
+*┃* ᪣ ${prefix}ai-search
+*┃* ᪣ ${prefix}gstatus
+*┃* ᪣ ${prefix}speed
+*┗──────────────⊷*
+
+*┏───〘 👥 GROUP COMMANDS 〙───⊷*
+*┃* ᪣ ${prefix}tagall
+*┃* ᪣ ${prefix}tagme
+*┃* ᪣ ${prefix}tagname
+*┃* ᪣ ${prefix}poll
+*┃* ᪣ ${prefix}couplepp
+*┃* ᪣ ${prefix}arise
+*┃* ᪣ ${prefix}tagall1
+*┗──────────────⊷*
+
+*┏───〘 🔧 OWNER COMMANDS 〙───⊷*
+*┃* ᪣ ${prefix}exec
+*┃* ᪣ ${prefix}>
+*┃* ᪣ ${prefix}eval
+*┗──────────────⊷*
+
+>made by Marisel
+
+💡 *Try these quick actions:*`;
+
+            const imgUrl = 'https://files.catbox.moe/s2ctl7.jpg';
             const author = 'Marisel';
-            const botname = 'Mercedes WhatsApp Bot';
+            const botname = 'Mercedes';
             const sourceUrl = 'https://karenbishop.online';
 
             let thumbnailBuffer;
@@ -83,37 +83,30 @@ _Smooth as a Mercedes engine_`;
                 thumbnailBuffer = Buffer.from('');
             }
 
-            // Send main menu with buttons
+            // Send with interactive buttons
             await sendInteractiveMessage(sock, m.from, {
-                title: '🚗 MERCEDES BOT',
+                title: 'MERCEDES BOT MENU',
                 text: menuText,
-                footer: 'Tap a button below to view commands',
+                footer: 'Premium WhatsApp Automation',
                 interactiveButtons: [
                     {
                         name: 'quick_reply',
                         buttonParamsJson: JSON.stringify({
-                            display_text: '🚗 Core Commands',
-                            id: 'menu_core'
+                            display_text: 'Alive',
+                            id: 'cmd_alive'
                         })
                     },
                     {
                         name: 'quick_reply',
                         buttonParamsJson: JSON.stringify({
-                            display_text: '🛠️ Utility Commands',
-                            id: 'menu_utility'
-                        })
-                    },
-                    {
-                        name: 'quick_reply',
-                        buttonParamsJson: JSON.stringify({
-                            display_text: '👥 Group Commands',
-                            id: 'menu_group'
+                            display_text: 'Ping',
+                            id: 'cmd_ping'
                         })
                     },
                     {
                         name: 'cta_url',
                         buttonParamsJson: JSON.stringify({
-                            display_text: '🌐 Visit Website',
+                            display_text: 'Visit Website',
                             url: sourceUrl
                         })
                     }
@@ -123,141 +116,8 @@ _Smooth as a Mercedes engine_`;
             await m.react('✅');
             
         } catch (err) {
-            console.error('❌ Error sending menu:', err);
-            try {
-                await m.react('❌');
-                await m.reply('❌ Failed to load menu. Please try again.');
-            } catch (e) {
-                console.error('Could not send error:', e);
-            }
-        }
-    },
-
-    // Handle button responses - IMPORTANT: This must be called
-    async onMessage(sock, m) {
-        // Only handle button responses
-        if (!m.isButtonResponse || !m.buttonId) return;
-        
-        console.log(`📱 Menu button clicked: ${m.buttonId}`);
-        
-        const prefix = global.BOT_PREFIX || '.';
-        
-        // Define commands for each category
-        const categories = {
-            'menu_core': {
-                title: '🚗 CORE COMMANDS',
-                commands: [
-                    `${prefix}ping - Check bot response speed`,
-                    `${prefix}uptime - View bot running time`,
-                    `${prefix}creator - Contact developer`,
-                    `${prefix}menu - Show this menu`,
-                    `${prefix}help - Get command help`,
-                    `${prefix}alive - Check if bot is online`
-                ]
-            },
-            'menu_utility': {
-                title: '🛠️ UTILITY COMMANDS',
-                commands: [
-                    `${prefix}sticker - Create sticker from image`,
-                    `${prefix}ocr - Extract text from images`,
-                    `${prefix}tts - Convert text to speech`,
-                    `${prefix}ai - Chat with AI assistant`,
-                    `${prefix}ai-search - Search with AI`,
-                    `${prefix}gstatus - Group status info`,
-                    `${prefix}speed - Test connection speed`
-                ]
-            },
-            'menu_group': {
-                title: '👥 GROUP COMMANDS',
-                commands: [
-                    `${prefix}tagall - Mention all members`,
-                    `${prefix}tagme - Tag yourself`,
-                    `${prefix}tagname - Tag with custom name`,
-                    `${prefix}poll - Create a poll`,
-                    `${prefix}couplepp - Show couple profile`,
-                    `${prefix}arise - Wake up the bot`
-                ]
-            },
-            'menu_main': {
-                title: '🚗 MAIN MENU',
-                // This will trigger going back to main menu
-                isMain: true
-            }
-        };
-
-        const category = categories[m.buttonId];
-        if (!category) {
-            console.log(`❌ Unknown button ID: ${m.buttonId}`);
-            return;
-        }
-
-        // If it's the main menu button, re-execute the menu command
-        if (m.buttonId === 'menu_main' || category.isMain) {
-            console.log('🔄 Returning to main menu');
-            return await this.execute(sock, m);
-        }
-
-        // Create box-style menu for the selected category
-        const categoryText = 
-`*┏───〘 ${category.title} 〙───⊷*
-${category.commands.map(cmd => `*┃* ${cmd}`).join('\n')}
-*┗──────────────⊷*
-
-💡 *Example:* \`${prefix}ping\`
-📚 *Help:* \`${prefix}help <command>\`
-
-🔙 *Tap Back to return to main menu*`;
-
-        try {
-            // Send reaction to indicate processing
-            await m.react('📂');
-            
-            await sendInteractiveMessage(sock, m.from, {
-                title: category.title,
-                text: categoryText,
-                footer: 'Mercedes Bot | Premium Commands',
-                interactiveButtons: [
-                    {
-                        name: 'quick_reply',
-                        buttonParamsJson: JSON.stringify({
-                            display_text: '🔙 Back to Main Menu',
-                            id: 'menu_main'
-                        })
-                    },
-                    {
-                        name: 'quick_reply',
-                        buttonParamsJson: JSON.stringify({
-                            display_text: '🚗 View Core Commands',
-                            id: 'menu_core'
-                        })
-                    },
-                    {
-                        name: 'quick_reply',
-                        buttonParamsJson: JSON.stringify({
-                            display_text: '🛠️ View Utility Commands',
-                            id: 'menu_utility'
-                        })
-                    },
-                    {
-                        name: 'cta_url',
-                        buttonParamsJson: JSON.stringify({
-                            display_text: '🌐 Visit Website',
-                            url: 'https://karenbishop.online'
-                        })
-                    }
-                ]
-            });
-            
-            await m.react('✅');
-            
-        } catch (err) {
-            console.error('❌ Error sending category menu:', err);
-            try {
-                await m.react('❌');
-                await m.reply('❌ Failed to load category. Please try again.');
-            } catch (e) {
-                console.error('Could not send error:', e);
-            }
+            console.error('❌ Error:', err);
+            await m.react('❌');
         }
     }
 };
