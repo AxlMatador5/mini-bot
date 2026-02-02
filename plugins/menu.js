@@ -31,8 +31,8 @@ module.exports = {
 *┃* Your Number: ${number}
 *┃* Prefix: ${prefix}
 *┗──────────────⊷*
-
-*┏───〘 🚗 CORE COMMANDS 〙───⊷*
+> *MAIN*
+*┏───〘 COMMANDS 〙───⊷*
 *┃* ᪣ ${prefix}ping
 *┃* ᪣ ${prefix}uptime
 *┃* ᪣ ${prefix}creator
@@ -40,8 +40,8 @@ module.exports = {
 *┃* ᪣ ${prefix}help
 *┃* ᪣ ${prefix}alive
 *┗──────────────⊷*
-
-*┏───〘 🛠️ UTILITY COMMANDS 〙───⊷*
+> *UTILITY*
+*┏───〘 COMMANDS 〙───⊷*
 *┃* ᪣ ${prefix}sticker
 *┃* ᪣ ${prefix}ocr
 *┃* ᪣ ${prefix}tts
@@ -50,8 +50,8 @@ module.exports = {
 *┃* ᪣ ${prefix}gstatus
 *┃* ᪣ ${prefix}speed
 *┗──────────────⊷*
-
-*┏───〘 👥 GROUP COMMANDS 〙───⊷*
+> *GROUP*
+*┏───〘 COMMANDS 〙───⊷*
 *┃* ᪣ ${prefix}tagall
 *┃* ᪣ ${prefix}tagme
 *┃* ᪣ ${prefix}tagname
@@ -67,16 +67,14 @@ module.exports = {
 *┃* ᪣ ${prefix}groupinfo
 *┃* ᪣ ${prefix}add
 *┗──────────────⊷*
-
-*┏───〘 🔧 OWNER COMMANDS 〙───⊷*
+> *OWNER*
+*┏───〘 COMMANDS 〙───⊷*
 *┃* ᪣ ${prefix}exec
 *┃* ᪣ ${prefix}>
 *┃* ᪣ ${prefix}eval
 *┗──────────────⊷*
 
->made by Marisel
-
-💡 *Try these quick actions:*`;
+> *made by Marisel*`;
 
             const imgUrl = 'https://files.catbox.moe/s2ctl7.jpg';
             const author = 'Marisel';
