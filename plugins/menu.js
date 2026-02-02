@@ -69,18 +69,6 @@ module.exports = {
 *┗──────────────⊷*
 
 *📋 SELECT A CATEGORY:*
-
-🚗 *Core Commands*
-🛠️ *Utility Commands*
-👥 *Group Commands*
-🔧 *Owner Commands*
-
-💡 *Tip:* Use \`${prefix}help <command>\` for details
-
-*🔗 Website:* karenbishop.online
-*👨‍💻 Developer:* Marisel
-
-🎯 *German Engineering Excellence*
 _Smooth as a Mercedes engine_`;
 
             const imgUrl = 'https://i.ibb.co/39GRRMX2/img-2m0cfk6r.jpg';
@@ -88,7 +76,12 @@ _Smooth as a Mercedes engine_`;
             const botname = 'Mercedes WhatsApp Bot';
             const sourceUrl = 'https://karenbishop.online';
 
-            const thumbnailBuffer = (await axios.get(imgUrl, { responseType: 'arraybuffer' })).data;
+            let thumbnailBuffer;
+            try {
+                thumbnailBuffer = (await axios.get(imgUrl, { responseType: 'arraybuffer' })).data;
+            } catch {
+                thumbnailBuffer = Buffer.from('');
+            }
 
             // Send main menu with buttons
             await sendInteractiveMessage(sock, m.from, {
@@ -140,9 +133,12 @@ _Smooth as a Mercedes engine_`;
         }
     },
 
-    // Handle button responses
+    // Handle button responses - IMPORTANT: This must be called
     async onMessage(sock, m) {
+        // Only handle button responses
         if (!m.isButtonResponse || !m.buttonId) return;
+        
+        console.log(`📱 Menu button clicked: ${m.buttonId}`);
         
         const prefix = global.BOT_PREFIX || '.';
         
@@ -181,11 +177,25 @@ _Smooth as a Mercedes engine_`;
                     `${prefix}couplepp - Show couple profile`,
                     `${prefix}arise - Wake up the bot`
                 ]
+            },
+            'menu_main': {
+                title: '🚗 MAIN MENU',
+                // This will trigger going back to main menu
+                isMain: true
             }
         };
 
         const category = categories[m.buttonId];
-        if (!category) return;
+        if (!category) {
+            console.log(`❌ Unknown button ID: ${m.buttonId}`);
+            return;
+        }
+
+        // If it's the main menu button, re-execute the menu command
+        if (m.buttonId === 'menu_main' || category.isMain) {
+            console.log('🔄 Returning to main menu');
+            return await this.execute(sock, m);
+        }
 
         // Create box-style menu for the selected category
         const categoryText = 
@@ -199,6 +209,9 @@ ${category.commands.map(cmd => `*┃* ${cmd}`).join('\n')}
 🔙 *Tap Back to return to main menu*`;
 
         try {
+            // Send reaction to indicate processing
+            await m.react('📂');
+            
             await sendInteractiveMessage(sock, m.from, {
                 title: category.title,
                 text: categoryText,
@@ -224,11 +237,27 @@ ${category.commands.map(cmd => `*┃* ${cmd}`).join('\n')}
                             display_text: '🛠️ View Utility Commands',
                             id: 'menu_utility'
                         })
+                    },
+                    {
+                        name: 'cta_url',
+                        buttonParamsJson: JSON.stringify({
+                            display_text: '🌐 Visit Website',
+                            url: 'https://karenbishop.online'
+                        })
                     }
                 ]
             });
+            
+            await m.react('✅');
+            
         } catch (err) {
-            console.error('Error sending category menu:', err);
+            console.error('❌ Error sending category menu:', err);
+            try {
+                await m.react('❌');
+                await m.reply('❌ Failed to load category. Please try again.');
+            } catch (e) {
+                console.error('Could not send error:', e);
+            }
         }
     }
 };
