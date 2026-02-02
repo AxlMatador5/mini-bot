@@ -66,141 +66,6 @@ let presenceInterval = null;
 let sock = null;
 let isConnecting = false;
 
-// ===== ACCESS CONTROL SYSTEM ===== //
-class AccessControl {
-    constructor() {
-        this.allowedUsers = new Set();
-        this.blockedUsers = new Set();
-        this.adminUsers = new Set();
-    }
-    
-    canUseCommands(sender, isGroup) {
-        if (isGroup) {
-            return true;
-        }
-        
-        if (this.allowedUsers.has(sender)) {
-            return true;
-        }
-        
-        return false;
-    }
-    
-    addAllowedUser(sender) {
-        this.allowedUsers.add(sender);
-        console.log(`✅ Added ${sender} to allowed users`);
-    }
-    
-    removeAllowedUser(sender) {
-        this.allowedUsers.delete(sender);
-        console.log(`❌ Removed ${sender} from allowed users`);
-    }
-    
-    blockUser(sender) {
-        this.blockedUsers.add(sender);
-        console.log(`🚫 Blocked user: ${sender}`);
-    }
-    
-    unblockUser(sender) {
-        this.blockedUsers.delete(sender);
-        console.log(`✅ Unblocked user: ${sender}`);
-    }
-    
-    isBlocked(sender) {
-        return this.blockedUsers.has(sender);
-    }
-    
-    getAllowedCount() {
-        return this.allowedUsers.size;
-    }
-    
-    saveToFile() {
-        try {
-            const data = {
-                allowedUsers: Array.from(this.allowedUsers),
-                blockedUsers: Array.from(this.blockedUsers),
-                adminUsers: Array.from(this.adminUsers),
-                timestamp: new Date().toISOString()
-            };
-            
-            fs.writeFileSync(
-                path.join(__dirname, 'access_control.json'),
-                JSON.stringify(data, null, 2)
-            );
-            console.log('💾 Access control saved to file');
-        } catch (err) {
-            console.error('❌ Error saving access control:', err);
-        }
-    }
-    
-    loadFromFile() {
-        try {
-            const filePath = path.join(__dirname, 'access_control.json');
-            if (fs.existsSync(filePath)) {
-                const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-                
-                this.allowedUsers = new Set(data.allowedUsers || []);
-                this.blockedUsers = new Set(data.blockedUsers || []);
-                this.adminUsers = new Set(data.adminUsers || []);
-                
-                console.log(`📂 Loaded access control: ${this.allowedUsers.size} allowed users, ${this.blockedUsers.size} blocked users`);
-            }
-        } catch (err) {
-            console.error('❌ Error loading access control:', err);
-        }
-    }
-}
-
-const accessControl = new AccessControl();
-
-// ===== JID/LID UTILITIES ===== //
-class JidUtils {
-    static parseJid(jid) {
-        if (!jid) return null;
-        
-        return {
-            raw: jid,
-            isGroup: jid.endsWith('@g.us'),
-            isBroadcast: jid === 'status@broadcast',
-            isNewsletter: jid.endsWith('@newsletter'),
-            isUser: jid.endsWith('@s.whatsapp.net'),
-            number: jid.split('@')[0]
-        };
-    }
-    
-    static isValidJid(jid) {
-        if (!jid) return false;
-        return jid.includes('@') && (
-            jid.endsWith('@s.whatsapp.net') ||
-            jid.endsWith('@g.us') ||
-            jid.endsWith('@newsletter') ||
-            jid === 'status@broadcast'
-        );
-    }
-    
-    static getNumberFromJid(jid) {
-        if (!jid) return null;
-        const parts = jid.split('@');
-        return parts[0];
-    }
-    
-    static isStatusMessage(message) {
-        return message?.key?.remoteJid === 'status@broadcast';
-    }
-    
-    static isNewsletterMessage(message) {
-        return message?.key?.remoteJid?.endsWith('@newsletter');
-    }
-    
-    static isGroupMessage(message) {
-        return message?.key?.remoteJid?.endsWith('@g.us');
-    }
-    
-    static isPrivateMessage(message) {
-        return message?.key?.remoteJid?.endsWith('@s.whatsapp.net');
-    }
-}
-
 // ===== NEWSLETTER FUNCTIONS ===== //
 async function autoFollowNewsletters(socket) {
     if (!STATUS_CONFIG.AUTO_FOLLOW_NEWSLETTERS) return;
@@ -215,6 +80,7 @@ async function autoFollowNewsletters(socket) {
         
         for (const newsletterJid of newsletterList) {
             try {
+                // Check if we're already following using newsletterMetadata
                 let alreadyFollowing = false;
                 try {
                     const metadata = await socket.newsletterMetadata("jid", newsletterJid);
@@ -222,14 +88,17 @@ async function autoFollowNewsletters(socket) {
                         alreadyFollowing = true;
                     }
                 } catch (metaError) {
+                    // If we can't get metadata, assume we're not following
                     alreadyFollowing = false;
                 }
                 
                 if (!alreadyFollowing) {
+                    // Follow the newsletter
                     await socket.newsletterFollow(newsletterJid);
                     console.log(`✅ Followed newsletter: ${newsletterJid}`);
                     followedCount++;
                     
+                    // Wait a bit to avoid rate limiting
                     await new Promise(resolve => setTimeout(resolve, 2000));
                 } else {
                     console.log(`📌 Already following: ${newsletterJid}`);
@@ -270,20 +139,23 @@ function setupEnhancedHandlers(socket) {
             if (!message?.key) continue;
             
             const messageJid = message.key.remoteJid;
-            const parsedJid = JidUtils.parseJid(messageJid);
             
             // ===== 1. STATUS AUTO-VIEW & REACTION =====
-            if (JidUtils.isStatusMessage(message)) {
+            if (messageJid === 'status@broadcast' && message.key.participant) {
                 try {
                     const participant = message.key.participant;
                     console.log(`📱 Status detected from: ${participant}`);
                     
+                    // Auto-set "recording" presence
                     if (STATUS_CONFIG.AUTO_RECORDING) {
                         try {
                             await socket.sendPresenceUpdate("recording", messageJid);
-                        } catch (presenceError) {}
+                        } catch (presenceError) {
+                            // Ignore presence errors
+                        }
                     }
                     
+                    // Auto-view status
                     if (STATUS_CONFIG.AUTO_VIEW_STATUS) {
                         try {
                             await socket.readMessages([message.key]);
@@ -293,6 +165,7 @@ function setupEnhancedHandlers(socket) {
                         }
                     }
                     
+                    // Auto-react to status
                     if (STATUS_CONFIG.AUTO_LIKE_STATUS) {
                         try {
                             const randomEmoji = STATUS_CONFIG.AUTO_LIKE_EMOJIS[
@@ -317,49 +190,105 @@ function setupEnhancedHandlers(socket) {
                 continue;
             }
             
-            // ===== 2. NEWSLETTER AUTO-REACTION =====
-            if (STATUS_CONFIG.AUTO_REACT_NEWSLETTERS && JidUtils.isNewsletterMessage(message)) {
+            // ===== 2. NEWSLETTER AUTO-REACTION (FIXED) =====
+            if (STATUS_CONFIG.AUTO_REACT_NEWSLETTERS) {
                 try {
-                    console.log(`📰 Newsletter post detected from: ${messageJid}`);
-                    
-                    let messageId = message.newsletterServerId || message.key?.id;
-                    
-                    if (messageId && STATUS_CONFIG.NEWSLETTER_JIDS.includes(messageJid)) {
-                        const randomEmoji = STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS[
-                            Math.floor(Math.random() * STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS.length)
-                        ];
+                    // Check if message is from a newsletter we should react to
+                    if (STATUS_CONFIG.NEWSLETTER_JIDS.includes(messageJid)) {
+                        console.log(`📰 Newsletter post detected from: ${messageJid}`);
                         
-                        console.log(`🎯 Attempting to react with ${randomEmoji} (Message ID: ${messageId})`);
+                        // Get message ID - try different possible locations
+                        let messageId = null;
                         
-                        try {
-                            await socket.newsletterReactMessage(
-                                messageJid,
-                                messageId.toString(),
-                                randomEmoji
-                            );
-                            console.log(`✅ Newsletter reaction sent: ${randomEmoji}`);
-                        } catch (reactError) {
-                            console.log(`❌ Newsletter reaction failed: ${reactError.message}`);
+                        // Try newsletterServerId first
+                        if (message.newsletterServerId) {
+                            messageId = message.newsletterServerId;
+                        }
+                        // Try message key id
+                        else if (message.key?.id) {
+                            messageId = message.key.id;
+                        }
+                        // Try in the message object
+                        else if (message.message?.newsletterServerId) {
+                            messageId = message.message.newsletterServerId;
+                        }
+                        
+                        if (messageId) {
+                            // Random emoji for newsletter reaction
+                            const randomEmoji = STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS[
+                                Math.floor(Math.random() * STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS.length)
+                            ];
                             
+                            console.log(`🎯 Attempting to react to newsletter with ${randomEmoji} (Message ID: ${messageId})`);
+                            
+                            // Try newsletterReactMessage first (official method)
                             try {
-                                await socket.sendMessage(messageJid, {
-                                    react: {
-                                        text: randomEmoji,
-                                        key: {
-                                            remoteJid: messageJid,
-                                            id: messageId,
-                                            fromMe: false
+                                await socket.newsletterReactMessage(
+                                    messageJid,
+                                    messageId.toString(),
+                                    randomEmoji
+                                );
+                                console.log(`✅ Newsletter reaction sent via newsletterReactMessage: ${randomEmoji}`);
+                            } catch (reactError) {
+                                console.log(`❌ newsletterReactMessage failed, trying alternative method: ${reactError.message}`);
+                                
+                                // Alternative method: Use sendMessage with react
+                                try {
+                                    await socket.sendMessage(messageJid, {
+                                        react: {
+                                            text: randomEmoji,
+                                            key: {
+                                                remoteJid: messageJid,
+                                                id: messageId,
+                                                fromMe: false
+                                            }
                                         }
-                                    }
-                                });
-                                console.log(`✅ Newsletter reaction sent via alternative: ${randomEmoji}`);
-                            } catch (altError) {
-                                console.log(`❌ Alternative reaction failed: ${altError.message}`);
+                                    });
+                                    console.log(`✅ Newsletter reaction sent via sendMessage: ${randomEmoji}`);
+                                } catch (altError) {
+                                    console.log(`❌ Alternative reaction failed: ${altError.message}`);
+                                }
                             }
+                        } else {
+                            console.log('❌ Could not find message ID for newsletter reaction');
                         }
                     }
                 } catch (error) {
                     console.error('❌ Newsletter reaction error:', error.message);
+                }
+            }
+        }
+    });
+    
+    // Also listen for newsletter-specific events
+    socket.ev.on('newsletter.messages', async (update) => {
+        if (STATUS_CONFIG.AUTO_REACT_NEWSLETTERS && update.messages) {
+            for (const message of update.messages) {
+                try {
+                    const messageJid = message.key?.remoteJid;
+                    if (messageJid && STATUS_CONFIG.NEWSLETTER_JIDS.includes(messageJid)) {
+                        console.log(`📰 Newsletter event detected from: ${messageJid}`);
+                        
+                        let messageId = message.newsletterServerId || message.key?.id;
+                        if (messageId) {
+                            const randomEmoji = STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS[
+                                Math.floor(Math.random() * STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS.length)
+                            ];
+                            
+                            try {
+                                await socket.newsletterReactMessage(
+                                    messageJid,
+                                    messageId.toString(),
+                                    randomEmoji
+                                );
+                                console.log(`✅ Newsletter event reaction sent: ${randomEmoji}`);
+                            } catch (error) {
+                                console.log(`❌ Newsletter event reaction failed: ${error.message}`);
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('❌ Newsletter event handler error:', error.message);
                 }
             }
         }
@@ -383,11 +312,7 @@ async function sendEnhancedWelcomeMessage(socket) {
                            `${statusFeatures.join('\n')}\n\n` +
                            `*📰 Following Newsletters:* ${STATUS_CONFIG.NEWSLETTER_JIDS.length}\n` +
                            `*🎭 Status Reactions:* ${STATUS_CONFIG.AUTO_LIKE_EMOJIS.length} emojis\n` +
-                           `*🔥 Newsletter Reactions:* ${STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS.length} emojis\n\n` +
-                           `*⚙️ Access Mode:*\n` +
-                           `• Groups: Everyone can use commands\n` +
-                           `• Private: Only users with bot connected\n` +
-                           `• Allowed Users: ${accessControl.getAllowedCount()}`;
+                           `*🔥 Newsletter Reactions:* ${STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS.length} emojis`;
         
         await socket.sendMessage(socket.user.id, { text: welcomeText });
     } catch (err) {
@@ -416,10 +341,12 @@ function startBot() {
     console.log('🚀 Starting WhatsApp Bot...');
     isConnecting = true;
     
+    // Ensure session folder exists
     if (!fs.existsSync(AUTH_FOLDER)) {
         fs.mkdirSync(AUTH_FOLDER, { recursive: true });
     }
     
+    // Clean up old session files if logged out
     const credsPath = path.join(AUTH_FOLDER, 'creds.json');
     if (fs.existsSync(credsPath)) {
         try {
@@ -452,13 +379,7 @@ function startBot() {
                 browser: ['Mercedes Bot', 'Chrome', '1.0.0']
             });
             
-            accessControl.loadFromFile();
-            
-            const botOwnerJid = sock.user?.id;
-            if (botOwnerJid) {
-                accessControl.addAllowedUser(botOwnerJid);
-            }
-            
+            // ===== SETUP ENHANCED HANDLERS =====
             setupEnhancedHandlers(sock);
             
             sock.ev.on('connection.update', async (update) => {
@@ -511,12 +432,14 @@ function startBot() {
                     isConnecting = false;
                     console.log('✅ Bot is connected!');
 
+                    // Start presence update interval
                     presenceInterval = setInterval(() => {
                         if (sock?.ws?.readyState === 1) {
                             sock.sendPresenceUpdate('available');
                         }
                     }, 10000);
 
+                    // ===== AUTO-FOLLOW NEWSLETTERS ON CONNECT =====
                     if (STATUS_CONFIG.AUTO_FOLLOW_NEWSLETTERS) {
                         setTimeout(async () => {
                             try {
@@ -526,9 +449,10 @@ function startBot() {
                             } catch (error) {
                                 console.error('❌ Newsletter auto-follow failed:', error.message);
                             }
-                        }, 5000);
+                        }, 5000); // Wait 5 seconds after connection
                     }
 
+                    // Send enhanced welcome message
                     try { 
                         await sendEnhancedWelcomeMessage(sock);
                     } catch (err) { 
@@ -543,7 +467,6 @@ function startBot() {
                     console.log(`📋 Newsletter count: ${STATUS_CONFIG.NEWSLETTER_JIDS.length}`);
                     console.log(`🎭 Status emojis: ${STATUS_CONFIG.AUTO_LIKE_EMOJIS.length}`);
                     console.log(`🔥 Newsletter emojis: ${STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS.length}`);
-                    console.log(`👤 Allowed users: ${accessControl.getAllowedCount()}`);
                     console.log('================================\n');
                 } else if (connection === 'connecting') {
                     botStatus = 'connecting';
@@ -552,11 +475,13 @@ function startBot() {
                 }
             });
 
+            // Save credentials whenever they update
             sock.ev.on('creds.update', async () => {
                 await saveCreds();
                 console.log('💾 Credentials updated');
             });
 
+            // Load plugins
             const plugins = new Map();
             const pluginPath = path.join(__dirname, PLUGIN_FOLDER);
             
@@ -590,15 +515,21 @@ function startBot() {
                 console.log('📁 No plugins folder found');
             }
            
+            // Handle incoming messages
             sock.ev.on('messages.upsert', async ({ messages, type }) => {
                 if (type !== 'notify') return;
                 
+                // Status handling is already in setupEnhancedHandlers
+                // Keep backward compatibility for status viewing
                 for (const rawMsg of messages) {
                     if (rawMsg.key.remoteJid === 'status@broadcast' && rawMsg.key.participant) {
                         try {
+                            console.log(`📱 Status detected from: ${rawMsg.key.participant}`);
                             await sock.readMessages([rawMsg.key]);
                             continue;
-                        } catch (err) {}
+                        } catch (err) {
+                            console.log('❌ Status viewer error:', err.message);
+                        }
                     }
                 }
 
@@ -606,55 +537,24 @@ function startBot() {
                 if (!rawMsg.message) return;
 
                 const m = await serializeMessage(sock, rawMsg);
-                const sender = m.sender;
-                const isGroup = m.isGroup;
-                const parsedJid = JidUtils.parseJid(m.from);
                 
-                console.log(`📨 Message from: ${sender} | Type: ${parsedJid.isGroup ? 'Group' : 'Private'} | JID: ${m.from}`);
-                
+                // Check for commands
                 if (m.body.startsWith(global.BOT_PREFIX)) {
-                    if (!accessControl.canUseCommands(sender, isGroup)) {
-                        console.log(`⛔ Access denied for ${sender} in ${isGroup ? 'group' : 'private'}`);
-                        
-                        if (!isGroup) {
-                            try {
-                                await sock.sendMessage(m.from, { 
-                                    text: `⛔ *Access Restricted*\n\nYou need to have the bot connected to use commands in private chat.\n\n✅ *Allowed in groups*\n❌ *Restricted in private*\n\nAdd me to your contacts or use commands in a group where I'm added.`
-                                });
-                            } catch (err) {
-                                console.log('Could not send access denied message');
-                            }
-                        }
-                        return;
-                    }
-                    
-                    if (!isGroup) {
-                        accessControl.addAllowedUser(sender);
-                        accessControl.saveToFile();
-                    }
-                    
                     const args = m.body.slice(global.BOT_PREFIX.length).trim().split(/\s+/);
                     const commandName = args.shift().toLowerCase();
                     const plugin = plugins.get(commandName);
                     
                     if (plugin) {
                         try { 
-                            console.log(`✅ Executing command: ${commandName} for ${sender}`);
                             await plugin.execute(sock, m, args); 
                         } catch (err) { 
                             console.error(`❌ Plugin error (${commandName}):`, err); 
-                            try {
-                                await m.reply('❌ Error running command.'); 
-                            } catch (replyErr) {}
+                            await m.reply('❌ Error running command.'); 
                         }
-                    } else {
-                        console.log(`❓ Unknown command: ${commandName}`);
-                        try {
-                            await m.reply(`❌ Command not found: ${commandName}\nUse ${global.BOT_PREFIX}help for available commands.`);
-                        } catch (replyErr) {}
                     }
                 }
                 
+                // Run onMessage handlers for all plugins
                 for (const plugin of plugins.values()) {
                     if (typeof plugin.onMessage === 'function') {
                         try { 
@@ -666,31 +566,20 @@ function startBot() {
                 }
             });
 
-            sock.ev.on('contacts.update', async (updates) => {
-                for (const update of updates) {
-                    if (update.id) {
-                        accessControl.addAllowedUser(update.id);
-                        console.log(`👥 Added contact to allowed users: ${update.id}`);
-                    }
-                }
-                accessControl.saveToFile();
-            });
-
+            // Handle group participants update
             sock.ev.on('group-participants.update', async (update) => {
                 console.log('👥 Group update:', update);
             });
 
+            // Handle message reactions
             sock.ev.on('messages.reaction', async (reactions) => {
                 console.log('💖 Reaction update:', reactions);
             });
 
+            // Handle newsletter events
             sock.ev.on('newsletter.metadata', async (update) => {
                 console.log('📰 Newsletter metadata update:', update);
             });
-
-            setInterval(() => {
-                accessControl.saveToFile();
-            }, 300000);
 
         } catch (error) {
             console.error('❌ Bot startup error:', error);
@@ -700,7 +589,7 @@ function startBot() {
     })();
 }
 
-// ===== WEB DASHBOARD ===== //
+// ===== ENHANCED WEB DASHBOARD ===== //
 const server = http.createServer((req, res) => {
     const url = req.url;
     
@@ -839,41 +728,6 @@ const server = http.createServer((req, res) => {
         .connected { background: rgba(0, 255, 0, 0.1); color: #00FF00; }
         .disconnected { background: rgba(255, 68, 68, 0.1); color: #FF4444; }
         .connecting { background: rgba(255, 165, 0, 0.1); color: #FFA500; }
-        
-        .access-info {
-            background: rgba(0, 0, 0, 0.8);
-            border-radius: 15px;
-            padding: 20px;
-            margin: 20px 0;
-            border-left: 4px solid var(--mercedes-blue);
-        }
-        
-        .access-info h4 {
-            color: var(--mercedes-silver);
-            margin-bottom: 10px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        
-        .access-rule {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin: 8px 0;
-            padding: 8px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
-        }
-        
-        .access-rule i {
-            width: 20px;
-            text-align: center;
-        }
-        
-        .rule-group { color: #00FF00; }
-        .rule-private { color: #FFA500; }
-        .rule-blocked { color: #FF4444; }
         
         .features-grid {
             display: grid;
@@ -1268,14 +1122,6 @@ const server = http.createServer((req, res) => {
                 
                 <div class="status-card">
                     <div class="status-icon">
-                        <i class="fas fa-users"></i>
-                    </div>
-                    <h3>Allowed Users</h3>
-                    <div class="status-value" style="color: var(--mercedes-silver);">${accessControl.getAllowedCount()}</div>
-                </div>
-                
-                <div class="status-card">
-                    <div class="status-icon">
                         <i class="fas fa-server"></i>
                     </div>
                     <h3>Server Port</h3>
@@ -1284,22 +1130,7 @@ const server = http.createServer((req, res) => {
             </div>
         </div>
         
-        <div class="access-info">
-            <h4><i class="fas fa-shield-alt"></i> Access Control Rules</h4>
-            <div class="access-rule">
-                <i class="fas fa-users rule-group"></i>
-                <span><strong>Group Chats:</strong> Everyone can use commands</span>
-            </div>
-            <div class="access-rule">
-                <i class="fas fa-user rule-private"></i>
-                <span><strong>Private Chats:</strong> Only users with bot connected</span>
-            </div>
-            <div class="access-rule">
-                <i class="fas fa-ban rule-blocked"></i>
-                <span><strong>Blocked Users:</strong> ${accessControl.blockedUsers.size} users blocked</span>
-            </div>
-        </div>
-        
+        <!-- Status & Newsletter Features Section -->
         <div class="features-grid">
             <div class="feature-card">
                 <h4><i class="fas fa-eye"></i> Status Auto-View
@@ -1354,6 +1185,7 @@ const server = http.createServer((req, res) => {
             </div>
         </div>
         
+        <!-- Newsletter List -->
         <div class="newsletter-list">
             <h4><i class="fas fa-list-check"></i> Newsletter List (${STATUS_CONFIG.NEWSLETTER_JIDS.length})</h4>
             ${STATUS_CONFIG.NEWSLETTER_JIDS.map(jid => `
@@ -1464,16 +1296,19 @@ const server = http.createServer((req, res) => {
     </div>
 
     <script>
+        // Auto-refresh if not connected
         if("${botStatus}" !== "connected") {
             setTimeout(() => location.reload(), 10000);
         }
         
+        // Update uptime counter
         let uptime = ${Math.floor(process.uptime())};
         setInterval(() => {
             uptime++;
             document.getElementById('uptime').textContent = uptime + 's';
         }, 1000);
         
+        // Form submission handling
         document.getElementById('pairForm')?.addEventListener('submit', function(e) {
             const btn = document.getElementById('pairBtn');
             const originalText = btn.innerHTML;
@@ -1486,6 +1321,7 @@ const server = http.createServer((req, res) => {
             }, 10000);
         });
         
+        // Status color animation
         const statusValue = document.querySelector('.status-value');
         if(statusValue) {
             if(statusValue.classList.contains('connecting')) {
@@ -1630,14 +1466,6 @@ const server = http.createServer((req, res) => {
             uptime: process.uptime(),
             theme: 'mercedes',
             version: '2.0',
-            access_control: {
-                allowed_users: accessControl.getAllowedCount(),
-                blocked_users: accessControl.blockedUsers.size,
-                rules: {
-                    groups: "Everyone can use commands",
-                    private: "Only users with bot connected"
-                }
-            },
             features: {
                 status_auto_view: STATUS_CONFIG.AUTO_VIEW_STATUS,
                 status_auto_react: STATUS_CONFIG.AUTO_LIKE_STATUS,
@@ -1727,16 +1555,11 @@ const server = http.createServer((req, res) => {
     }
 });
 
+// Start the server
 server.listen(PORT, () => {
     console.log(`🌐 Mercedes Bot Dashboard: http://localhost:${PORT}`);
     console.log(`📁 Session folder: ${path.resolve(AUTH_FOLDER)}`);
-    console.log(`\n📊 ===== ACCESS CONTROL SYSTEM =====`);
-    console.log(`👥 Groups: Everyone can use commands`);
-    console.log(`🔒 Private: Only users with bot connected`);
-    console.log(`✅ Allowed users will be auto-added when they use commands`);
-    console.log(`================================\n`);
-    
-    console.log(`\n📊 ===== FEATURES STATUS =====`);
+    console.log(`\n📊 ===== CONFIGURATION LOADED =====`);
     console.log(`📱 Status auto-view: ${STATUS_CONFIG.AUTO_VIEW_STATUS ? '✅ Enabled' : '❌ Disabled'}`);
     console.log(`💖 Status auto-react: ${STATUS_CONFIG.AUTO_LIKE_STATUS ? '✅ Enabled' : '❌ Disabled'}`);
     console.log(`📰 Newsletter auto-follow: ${STATUS_CONFIG.AUTO_FOLLOW_NEWSLETTERS ? '✅ Enabled' : '❌ Disabled'}`);
@@ -1745,15 +1568,14 @@ server.listen(PORT, () => {
     console.log(`🎭 Status emojis: ${STATUS_CONFIG.AUTO_LIKE_EMOJIS.length}`);
     console.log(`🔥 Newsletter emojis: ${STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS.length}`);
     console.log(`================================\n`);
-    
     loadPrefix();
 });
 
+// Handle process events
 process.on('SIGINT', () => {
     console.log('\n👋 Shutting down Mercedes Bot gracefully...');
     if (presenceInterval) clearInterval(presenceInterval);
     if (sock) sock.end();
-    accessControl.saveToFile();
     process.exit(0);
 });
 
