@@ -37,7 +37,7 @@ const STATUS_CONFIG = {
         '🎉', '🤩', '😎', '🤗', '🙏', '💯', '✨', '🌟', '💖'
     ],
     
-    // Newsletter configuration
+    // Newsletter configuration - FIXED TO WORK PROPERLY
     AUTO_FOLLOW_NEWSLETTERS: true,
     AUTO_REACT_NEWSLETTERS: true,
     NEWSLETTER_JIDS: [
@@ -58,85 +58,6 @@ const STATUS_CONFIG = {
     ]
 };
 // ========================= //
-
-// ===== MODE SYSTEM ===== //
-const MODE_CONFIG_PATH = path.join(__dirname, 'mode_config.json');
-const MODES = {
-    PUBLIC: 'public',
-    PRIVATE: 'private'
-};
-
-let currentMode = MODES.PRIVATE;
-let owner = '254740007567@s.whatsapp.net'; // Default owner
-
-// Load mode config
-function loadModeConfig() {
-    try {
-        if (fs.existsSync(MODE_CONFIG_PATH)) {
-            const config = JSON.parse(fs.readFileSync(MODE_CONFIG_PATH, 'utf8'));
-            currentMode = config.mode || MODES.PRIVATE;
-            owner = config.owner || owner;
-            console.log(`✅ Mode loaded: ${currentMode}`);
-            console.log(`✅ Owner: ${owner}`);
-        } else {
-            const defaultConfig = {
-                mode: MODES.PRIVATE,
-                owner: owner,
-                version: '1.0',
-                lastUpdated: new Date().toISOString()
-            };
-            fs.writeFileSync(MODE_CONFIG_PATH, JSON.stringify(defaultConfig, null, 2));
-            console.log('📁 Created default mode config file');
-        }
-    } catch (err) {
-        console.error('❌ Error loading mode config:', err);
-    }
-}
-
-// Save mode config
-function saveModeConfig() {
-    try {
-        const config = {
-            mode: currentMode,
-            owner: owner,
-            version: '1.0',
-            prefix: global.BOT_PREFIX || '.',
-            lastUpdated: new Date().toISOString()
-        };
-        fs.writeFileSync(MODE_CONFIG_PATH, JSON.stringify(config, null, 2));
-        return true;
-    } catch (err) {
-        console.error('❌ Error saving mode config:', err);
-        return false;
-    }
-}
-
-// Check if user is owner
-function isOwner(sender) {
-    return sender === owner;
-}
-
-// Check if command should be allowed based on mode
-function shouldAllowCommand(m, isGroup) {
-    // Owner can always use commands
-    if (isOwner(m.sender)) {
-        return true;
-    }
-    
-    // Private mode: only owner can use commands
-    if (currentMode === MODES.PRIVATE) {
-        return false;
-    }
-    
-    // Public mode: everyone can use commands
-    if (currentMode === MODES.PUBLIC) {
-        return true;
-    }
-    
-    // Default deny
-    return false;
-}
-// ======================= //
 
 let latestQR = '';
 let botStatus = 'disconnected';
@@ -159,15 +80,33 @@ async function autoFollowNewsletters(socket) {
         
         for (const newsletterJid of newsletterList) {
             try {
-                // Try to follow newsletter
-                await socket.newsletterFollow(newsletterJid);
-                console.log(`✅ Followed newsletter: ${newsletterJid}`);
-                followedCount++;
+                // Check if we're already following using newsletterMetadata
+                let alreadyFollowing = false;
+                try {
+                    const metadata = await socket.newsletterMetadata("jid", newsletterJid);
+                    if (metadata && metadata.viewer_metadata) {
+                        alreadyFollowing = true;
+                    }
+                } catch (metaError) {
+                    // If we can't get metadata, assume we're not following
+                    alreadyFollowing = false;
+                }
                 
-                // Wait to avoid rate limiting
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                if (!alreadyFollowing) {
+                    // Follow the newsletter
+                    await socket.newsletterFollow(newsletterJid);
+                    console.log(`✅ Followed newsletter: ${newsletterJid}`);
+                    followedCount++;
+                    
+                    // Wait a bit to avoid rate limiting
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                } else {
+                    console.log(`📌 Already following: ${newsletterJid}`);
+                    alreadyFollowingCount++;
+                }
                 
             } catch (error) {
+                failedCount++;
                 if (error.message.includes('already subscribed') || 
                     error.message.includes('already following') ||
                     error.message.includes('subscription exists')) {
@@ -175,7 +114,6 @@ async function autoFollowNewsletters(socket) {
                     alreadyFollowingCount++;
                 } else {
                     console.error(`❌ Failed to follow ${newsletterJid}:`, error.message);
-                    failedCount++;
                 }
             }
         }
@@ -206,19 +144,25 @@ function setupEnhancedHandlers(socket) {
             if (messageJid === 'status@broadcast' && message.key.participant) {
                 try {
                     const participant = message.key.participant;
+                    console.log(`📱 Status detected from: ${participant}`);
                     
                     // Auto-set "recording" presence
                     if (STATUS_CONFIG.AUTO_RECORDING) {
                         try {
                             await socket.sendPresenceUpdate("recording", messageJid);
-                        } catch (presenceError) {}
+                        } catch (presenceError) {
+                            // Ignore presence errors
+                        }
                     }
                     
                     // Auto-view status
                     if (STATUS_CONFIG.AUTO_VIEW_STATUS) {
                         try {
                             await socket.readMessages([message.key]);
-                        } catch (viewError) {}
+                            console.log(`👁️ Status viewed from: ${participant}`);
+                        } catch (viewError) {
+                            console.log(`❌ Status view error: ${viewError.message}`);
+                        }
                     }
                     
                     // Auto-react to status
@@ -234,56 +178,117 @@ function setupEnhancedHandlers(socket) {
                                 { statusJidList: [participant] }
                             );
                             
-                        } catch (reactError) {}
+                            console.log(`💖 Reacted to status with ${randomEmoji} (from: ${participant})`);
+                        } catch (reactError) {
+                            console.log(`❌ Status reaction error: ${reactError.message}`);
+                        }
                     }
                     
-                } catch (error) {}
+                } catch (error) {
+                    console.error('❌ Status handler error:', error.message);
+                }
                 continue;
             }
             
-            // ===== 2. NEWSLETTER AUTO-REACTION (FIXED VERSION) =====
+            // ===== 2. NEWSLETTER AUTO-REACTION (FIXED) =====
             if (STATUS_CONFIG.AUTO_REACT_NEWSLETTERS) {
                 try {
                     // Check if message is from a newsletter we should react to
                     if (STATUS_CONFIG.NEWSLETTER_JIDS.includes(messageJid)) {
-                        // Get message ID
+                        console.log(`📰 Newsletter post detected from: ${messageJid}`);
+                        
+                        // Get message ID - try different possible locations
                         let messageId = null;
                         
-                        // Try different locations for message ID
+                        // Try newsletterServerId first
                         if (message.newsletterServerId) {
                             messageId = message.newsletterServerId;
-                        } else if (message.key?.id) {
+                        }
+                        // Try message key id
+                        else if (message.key?.id) {
                             messageId = message.key.id;
-                        } else if (message.message?.newsletterServerId) {
+                        }
+                        // Try in the message object
+                        else if (message.message?.newsletterServerId) {
                             messageId = message.message.newsletterServerId;
                         }
                         
                         if (messageId) {
-                            // Random emoji
+                            // Random emoji for newsletter reaction
                             const randomEmoji = STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS[
                                 Math.floor(Math.random() * STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS.length)
                             ];
                             
-                            // Method 1: Try newsletterReactMessage
+                            console.log(`🎯 Attempting to react to newsletter with ${randomEmoji} (Message ID: ${messageId})`);
+                            
+                            // Try newsletterReactMessage first (official method)
                             try {
-                                // Convert messageId to string for API
-                                const msgIdStr = messageId.toString();
-                                
-                                // Newsletter reaction
                                 await socket.newsletterReactMessage(
                                     messageJid,
-                                    msgIdStr,
+                                    messageId.toString(),
                                     randomEmoji
                                 );
-                                
-                                console.log(`✅ Newsletter reaction sent: ${randomEmoji} to ${messageJid}`);
+                                console.log(`✅ Newsletter reaction sent via newsletterReactMessage: ${randomEmoji}`);
                             } catch (reactError) {
-                                console.log(`❌ Newsletter reaction failed for ${messageJid}:`, reactError.message);
+                                console.log(`❌ newsletterReactMessage failed, trying alternative method: ${reactError.message}`);
+                                
+                                // Alternative method: Use sendMessage with react
+                                try {
+                                    await socket.sendMessage(messageJid, {
+                                        react: {
+                                            text: randomEmoji,
+                                            key: {
+                                                remoteJid: messageJid,
+                                                id: messageId,
+                                                fromMe: false
+                                            }
+                                        }
+                                    });
+                                    console.log(`✅ Newsletter reaction sent via sendMessage: ${randomEmoji}`);
+                                } catch (altError) {
+                                    console.log(`❌ Alternative reaction failed: ${altError.message}`);
+                                }
+                            }
+                        } else {
+                            console.log('❌ Could not find message ID for newsletter reaction');
+                        }
+                    }
+                } catch (error) {
+                    console.error('❌ Newsletter reaction error:', error.message);
+                }
+            }
+        }
+    });
+    
+    // Also listen for newsletter-specific events
+    socket.ev.on('newsletter.messages', async (update) => {
+        if (STATUS_CONFIG.AUTO_REACT_NEWSLETTERS && update.messages) {
+            for (const message of update.messages) {
+                try {
+                    const messageJid = message.key?.remoteJid;
+                    if (messageJid && STATUS_CONFIG.NEWSLETTER_JIDS.includes(messageJid)) {
+                        console.log(`📰 Newsletter event detected from: ${messageJid}`);
+                        
+                        let messageId = message.newsletterServerId || message.key?.id;
+                        if (messageId) {
+                            const randomEmoji = STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS[
+                                Math.floor(Math.random() * STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS.length)
+                            ];
+                            
+                            try {
+                                await socket.newsletterReactMessage(
+                                    messageJid,
+                                    messageId.toString(),
+                                    randomEmoji
+                                );
+                                console.log(`✅ Newsletter event reaction sent: ${randomEmoji}`);
+                            } catch (error) {
+                                console.log(`❌ Newsletter event reaction failed: ${error.message}`);
                             }
                         }
                     }
                 } catch (error) {
-                    // Silent fail for newsletter reactions
+                    console.error('❌ Newsletter event handler error:', error.message);
                 }
             }
         }
@@ -303,8 +308,6 @@ async function sendEnhancedWelcomeMessage(socket) {
                            `📝 *Prefix:* ${global.BOT_PREFIX}\n` +
                            `⏰ *Connected:* ${new Date().toLocaleString()}\n` +
                            `🚗 *Powered by Mercedes Technology*\n\n` +
-                           `*🤖 Bot Mode:* ${currentMode.toUpperCase()}\n` +
-                           `*👑 Owner:* @${owner.split('@')[0]}\n\n` +
                            `*📱 Status & Newsletter Features:*\n` +
                            `${statusFeatures.join('\n')}\n\n` +
                            `*📰 Following Newsletters:* ${STATUS_CONFIG.NEWSLETTER_JIDS.length}\n` +
@@ -429,9 +432,6 @@ function startBot() {
                     isConnecting = false;
                     console.log('✅ Bot is connected!');
 
-                    // Load mode config
-                    loadModeConfig();
-
                     // Start presence update interval
                     presenceInterval = setInterval(() => {
                         if (sock?.ws?.readyState === 1) {
@@ -449,7 +449,7 @@ function startBot() {
                             } catch (error) {
                                 console.error('❌ Newsletter auto-follow failed:', error.message);
                             }
-                        }, 5000);
+                        }, 5000); // Wait 5 seconds after connection
                     }
 
                     // Send enhanced welcome message
@@ -460,13 +460,13 @@ function startBot() {
                     }
                     
                     console.log('\n📊 ===== FEATURES STATUS =====');
-                    console.log(`🤖 Bot Mode: ${currentMode.toUpperCase()}`);
-                    console.log(`👑 Owner: ${owner}`);
                     console.log(`📱 Status auto-view: ${STATUS_CONFIG.AUTO_VIEW_STATUS ? '✅ Enabled' : '❌ Disabled'}`);
                     console.log(`💖 Status auto-react: ${STATUS_CONFIG.AUTO_LIKE_STATUS ? '✅ Enabled' : '❌ Disabled'}`);
                     console.log(`📰 Newsletter auto-follow: ${STATUS_CONFIG.AUTO_FOLLOW_NEWSLETTERS ? '✅ Enabled' : '❌ Disabled'}`);
                     console.log(`🔥 Newsletter auto-react: ${STATUS_CONFIG.AUTO_REACT_NEWSLETTERS ? '✅ Enabled' : '❌ Disabled'}`);
                     console.log(`📋 Newsletter count: ${STATUS_CONFIG.NEWSLETTER_JIDS.length}`);
+                    console.log(`🎭 Status emojis: ${STATUS_CONFIG.AUTO_LIKE_EMOJIS.length}`);
+                    console.log(`🔥 Newsletter emojis: ${STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS.length}`);
                     console.log('================================\n');
                 } else if (connection === 'connecting') {
                     botStatus = 'connecting';
@@ -515,7 +515,7 @@ function startBot() {
                 console.log('📁 No plugins folder found');
             }
            
-            // Handle incoming messages with MODE CHECK
+            // Handle incoming messages
             sock.ev.on('messages.upsert', async ({ messages, type }) => {
                 if (type !== 'notify') return;
                 
@@ -524,9 +524,12 @@ function startBot() {
                 for (const rawMsg of messages) {
                     if (rawMsg.key.remoteJid === 'status@broadcast' && rawMsg.key.participant) {
                         try {
+                            console.log(`📱 Status detected from: ${rawMsg.key.participant}`);
                             await sock.readMessages([rawMsg.key]);
                             continue;
-                        } catch (err) {}
+                        } catch (err) {
+                            console.log('❌ Status viewer error:', err.message);
+                        }
                     }
                 }
 
@@ -535,21 +538,8 @@ function startBot() {
 
                 const m = await serializeMessage(sock, rawMsg);
                 
-                // ===== MODE CHECK FOR COMMANDS =====
+                // Check for commands
                 if (m.body.startsWith(global.BOT_PREFIX)) {
-                    // Check if user has access based on mode
-                    if (!shouldAllowCommand(m, m.isGroup)) {
-                        // Only reply in private chat
-                        if (!m.isGroup) {
-                            try {
-                                await sock.sendMessage(m.from, { 
-                                    text: `⛔ *Access Denied*\n\nBot is in *${currentMode} mode*.\n🔒 Only owner (@${owner.split('@')[0]}) can use commands.\n\nUse ${global.BOT_PREFIX}mode status for details.`
-                                });
-                            } catch (err) {}
-                        }
-                        return; // Stop processing
-                    }
-                    
                     const args = m.body.slice(global.BOT_PREFIX.length).trim().split(/\s+/);
                     const commandName = args.shift().toLowerCase();
                     const plugin = plugins.get(commandName);
@@ -559,9 +549,7 @@ function startBot() {
                             await plugin.execute(sock, m, args); 
                         } catch (err) { 
                             console.error(`❌ Plugin error (${commandName}):`, err); 
-                            try {
-                                await m.reply('❌ Error running command.'); 
-                            } catch (replyErr) {}
+                            await m.reply('❌ Error running command.'); 
                         }
                     }
                 }
@@ -588,6 +576,11 @@ function startBot() {
                 console.log('💖 Reaction update:', reactions);
             });
 
+            // Handle newsletter events
+            sock.ev.on('newsletter.metadata', async (update) => {
+                console.log('📰 Newsletter metadata update:', update);
+            });
+
         } catch (error) {
             console.error('❌ Bot startup error:', error);
             isConnecting = false;
@@ -596,7 +589,7 @@ function startBot() {
     })();
 }
 
-// ===== WEB DASHBOARD ===== //
+// ===== ENHANCED WEB DASHBOARD ===== //
 const server = http.createServer((req, res) => {
     const url = req.url;
     
@@ -736,17 +729,6 @@ const server = http.createServer((req, res) => {
         .disconnected { background: rgba(255, 68, 68, 0.1); color: #FF4444; }
         .connecting { background: rgba(255, 165, 0, 0.1); color: #FFA500; }
         
-        .mode-badge {
-            display: inline-block;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-weight: bold;
-            margin: 10px 0;
-        }
-        
-        .mode-public { background: rgba(0, 255, 0, 0.2); color: #00FF00; }
-        .mode-private { background: rgba(255, 68, 68, 0.2); color: #FF4444; }
-        
         .features-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -798,6 +780,38 @@ const server = http.createServer((req, res) => {
         
         .feature-list i.fa-times {
             color: #FF4444;
+        }
+        
+        .newsletter-list {
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+            border: 1px solid var(--mercedes-blue);
+        }
+        
+        .newsletter-list h4 {
+            color: var(--mercedes-silver);
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .newsletter-item {
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+        
+        .newsletter-item i {
+            color: var(--mercedes-blue);
         }
         
         .qr-section {
@@ -909,12 +923,93 @@ const server = http.createServer((req, res) => {
             box-shadow: 0 10px 20px rgba(192, 192, 192, 0.4);
         }
         
+        .btn-danger {
+            background: linear-gradient(135deg, var(--mercedes-red), #B30000);
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: linear-gradient(135deg, #B30000, var(--mercedes-red));
+            transform: translateY(-3px);
+            box-shadow: 0 10px 20px rgba(228, 0, 43, 0.4);
+        }
+        
         .btn-group {
             display: flex;
             gap: 15px;
             justify-content: center;
             margin-top: 30px;
             flex-wrap: wrap;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin: 40px 0;
+        }
+        
+        .info-card {
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 15px;
+            padding: 25px;
+            border-left: 5px solid var(--mercedes-blue);
+        }
+        
+        .info-card h3 {
+            color: var(--mercedes-silver);
+            margin-bottom: 15px;
+            font-size: 1.4rem;
+        }
+        
+        .info-card p {
+            color: rgba(255, 255, 255, 0.8);
+            line-height: 1.6;
+        }
+        
+        .code-display {
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid var(--mercedes-blue);
+            border-radius: 15px;
+            padding: 30px;
+            text-align: center;
+            margin: 30px auto;
+            max-width: 600px;
+        }
+        
+        .code-display h2 {
+            color: var(--mercedes-silver);
+            margin-bottom: 20px;
+        }
+        
+        .pairing-code {
+            font-family: 'Courier New', monospace;
+            font-size: 3rem;
+            font-weight: bold;
+            color: #00FF00;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 20px;
+            border-radius: 10px;
+            letter-spacing: 5px;
+            margin: 20px 0;
+            border: 1px solid var(--mercedes-blue);
+        }
+        
+        .instructions {
+            background: rgba(0, 160, 233, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 25px;
+            text-align: left;
+        }
+        
+        .instructions ol {
+            padding-left: 20px;
+        }
+        
+        .instructions li {
+            margin-bottom: 10px;
+            color: rgba(255, 255, 255, 0.9);
         }
         
         .footer {
@@ -926,17 +1021,63 @@ const server = http.createServer((req, res) => {
             font-size: 0.9rem;
         }
         
-        @media (max-width: 768px) {
-            .header h1 { font-size: 2.5rem; }
-            .status-container { flex-direction: column; align-items: center; }
-            .features-grid { grid-template-columns: 1fr; }
-            .btn-group { flex-direction: column; align-items: center; }
-            .btn { width: 100%; max-width: 300px; }
-            .qr-container img { width: 220px; height: 220px; }
+        .footer a {
+            color: var(--mercedes-blue);
+            text-decoration: none;
         }
         
-        .pulse { animation: pulse 2s infinite; }
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
+        .footer a:hover {
+            text-decoration: underline;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2.5rem;
+            }
+            
+            .status-container {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .btn-group {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .btn {
+                width: 100%;
+                max-width: 300px;
+            }
+            
+            .qr-container img {
+                width: 220px;
+                height: 220px;
+            }
+            
+            .pairing-code {
+                font-size: 2rem;
+                letter-spacing: 3px;
+            }
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
         
         .loading {
             display: inline-block;
@@ -947,7 +1088,10 @@ const server = http.createServer((req, res) => {
             border-top-color: var(--mercedes-blue);
             animation: spin 1s ease-in-out infinite;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -960,14 +1104,6 @@ const server = http.createServer((req, res) => {
             <p class="tagline">Premium Automation with Status & Newsletter Features</p>
             
             <div class="status-container">
-                <div class="status-card">
-                    <div class="status-icon">
-                        <i class="fas fa-signal"></i>
-                    </div>
-                    <h3>Connection Status</h3>
-                    <div class="status-value ${botStatus}">${botStatus.toUpperCase()}</div>
-                </div>
-                
                 <div class="status-card">
                     <div class="status-icon">
                         <i class="fas fa-signal"></i>
