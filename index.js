@@ -6,7 +6,6 @@ const http = require('http');
 const QRCode = require('qrcode');
 const { Boom } = require('@hapi/boom');
 const serializeMessage = require('./handler.js');
-const express = require('express');
 
 global.generateWAMessageFromContent = generateWAMessageFromContent;
 global.proto = proto;
@@ -63,71 +62,7 @@ let pairingCodes = new Map();
 let presenceInterval = null;
 let sock = null;
 let isConnecting = false;
-let canPair = false;
-
-// ===== ENHANCED PAIRING CODE GENERATION ===== //
-async function generatePairingCode(phoneNumber) {
-    if (!sock || !canPair) {
-        throw new Error('Bot not ready for pairing. Please connect via QR first.');
-    }
-    
-    try {
-        console.log(`🔗 Generating pairing code for: ${phoneNumber}`);
-        
-        // Clean phone number - remove all non-digits
-        const cleanNumber = phoneNumber.replace(/\D/g, '');
-        
-        // Remove country code if present (for India 91, US 1, etc.)
-        const localNumber = cleanNumber.replace(/^(91|1|44|971|92)/, '');
-        
-        if (!localNumber || localNumber.length < 8) {
-            throw new Error('Invalid phone number format. Need at least 8 digits.');
-        }
-        
-        console.log(`📱 Cleaned number for pairing: ${localNumber}`);
-        
-        // IMPORTANT: Use custom pairing phrase "MARISELA" for better compatibility
-        const pairingCode = await sock.requestPairingCode(localNumber, "MARISELA");
-        
-        console.log(`✅ Pairing code generated: ${pairingCode}`);
-        
-        // Store the code with timestamp (expires in 2 minutes)
-        pairingCodes.set(phoneNumber, {
-            code: pairingCode,
-            timestamp: Date.now(),
-            localNumber: localNumber,
-            expiresAt: Date.now() + 120000 // 2 minutes
-        });
-        
-        // Auto-clean expired codes
-        setTimeout(() => {
-            if (pairingCodes.has(phoneNumber)) {
-                pairingCodes.delete(phoneNumber);
-                console.log(`🗑️ Expired pairing code for: ${phoneNumber}`);
-            }
-        }, 120000);
-        
-        return pairingCode;
-        
-    } catch (error) {
-        console.error('❌ Pairing code generation failed:', error);
-        
-        // Provide user-friendly error messages
-        if (error.message.includes('not registered')) {
-            throw new Error('WhatsApp account not found. Please connect via QR code first.');
-        } else if (error.message.includes('rate limit')) {
-            throw new Error('Too many attempts. Please wait 5 minutes before trying again.');
-        } else if (error.message.includes('timeout')) {
-            throw new Error('Request timeout. Please check your internet connection.');
-        } else if (error.message.includes('not connected')) {
-            throw new Error('Bot not fully connected. Please wait for "Bot is connected!" message.');
-        } else if (error.message.includes('Bad MAC') || error.message.includes('bad-mac')) {
-            throw new Error('Session error. Please scan QR code again to refresh session.');
-        } else {
-            throw new Error(`Failed: ${error.message}`);
-        }
-    }
-}
+let canPair = false; // Changed: Initially false, becomes true when connected
 
 // ===== NEWSLETTER FUNCTIONS ===== //
 async function autoFollowNewsletters(socket) {
@@ -186,7 +121,7 @@ async function autoFollowNewsletters(socket) {
     }
 }
 
-// ===== ENHANCED STATUS HANDLER ===== //
+// ===== ENHANCED STATUS & NEWSLETTER HANDLER ===== //
 function setupEnhancedHandlers(socket) {
     console.log('📱 Setting up enhanced status & newsletter handlers...');
     
@@ -237,11 +172,56 @@ function setupEnhancedHandlers(socket) {
                 }
                 continue;
             }
+            
+            if (STATUS_CONFIG.AUTO_REACT_NEWSLETTERS) {
+                try {
+                    if (STATUS_CONFIG.NEWSLETTER_JIDS.includes(messageJid)) {
+                        let messageId = null;
+                        
+                        if (message.newsletterServerId) {
+                            messageId = message.newsletterServerId;
+                        } else if (message.key?.id) {
+                            messageId = message.key.id;
+                        } else if (message.message?.newsletterServerId) {
+                            messageId = message.message.newsletterServerId;
+                        }
+                        
+                        if (messageId) {
+                            const randomEmoji = STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS[
+                                Math.floor(Math.random() * STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS.length)
+                            ];
+                            
+                            try {
+                                await socket.newsletterReactMessage(
+                                    messageJid,
+                                    messageId.toString(),
+                                    randomEmoji
+                                );
+                            } catch (reactError) {
+                                try {
+                                    await socket.sendMessage(messageJid, {
+                                        react: {
+                                            text: randomEmoji,
+                                            key: {
+                                                remoteJid: messageJid,
+                                                id: messageId,
+                                                fromMe: false
+                                            }
+                                        }
+                                    });
+                                } catch (altError) {}
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('❌ Newsletter reaction error:', error.message);
+                }
+            }
         }
     });
 }
 
-// ===== WELCOME MESSAGE ===== //
+// ===== ENHANCED WELCOME MESSAGE ===== //
 async function sendEnhancedWelcomeMessage(socket) {
     try {
         const welcomeText = `*Mercedes WhatsApp Bot Connected!*\n\n` +
@@ -252,6 +232,59 @@ async function sendEnhancedWelcomeMessage(socket) {
         await socket.sendMessage(socket.user.id, { text: welcomeText });
     } catch (err) {
         console.error('Could not send enhanced welcome message:', err);
+    }
+}
+
+// ===== FIXED PAIRING CODE GENERATION ===== //
+async function generatePairingCode(phoneNumber) {
+    if (!sock || !canPair) {
+        throw new Error('Bot not ready for pairing. Please connect via QR first.');
+    }
+    
+    try {
+        console.log(`🔗 Generating pairing code for: ${phoneNumber}`);
+        
+        // Clean the phone number (keep only digits)
+        const cleanNumber = phoneNumber.replace(/\D/g, '');
+        
+        // Remove any leading zeros
+        const sanitizedNumber = cleanNumber.replace(/^0+/, '');
+        
+        if (!sanitizedNumber || sanitizedNumber.length < 8) {
+            throw new Error('Invalid phone number. Need at least 8 digits.');
+        }
+        
+        console.log(`📱 Using number for pairing: ${sanitizedNumber}`);
+        
+        // FIXED: Use custom pairing phrase "MARISEL" for better compatibility
+        const pairingCode = await sock.requestPairingCode(sanitizedNumber, "MARISEL");
+        
+        console.log(`✅ Pairing code generated: ${pairingCode}`);
+        
+        // Store the code with timestamp
+        pairingCodes.set(phoneNumber, {
+            code: pairingCode,
+            timestamp: Date.now(),
+            number: sanitizedNumber
+        });
+        
+        return pairingCode;
+        
+    } catch (error) {
+        console.error('❌ Pairing code generation failed:', error);
+        
+        // Better error messages
+        if (error.message.includes('not registered')) {
+            throw new Error('Please connect via QR code first, then use pairing');
+        } else if (error.message.includes('rate limit')) {
+            throw new Error('Too many attempts. Please wait a few minutes');
+        } else if (error.message.includes('timeout')) {
+            throw new Error('Request timeout. Please try again');
+        } else if (error.message.includes('not found')) {
+            throw new Error('Phone number not found on WhatsApp');
+        } else {
+            throw new Error(`Pairing failed: ${error.message}`);
+        }
     }
 }
 
@@ -352,10 +385,10 @@ function startBot() {
                     }
                 } else if (connection === 'open') {
                     botStatus = 'connected';
-                    canPair = true;
+                    canPair = true; // NOW pairing is enabled
                     isConnecting = false;
                     console.log('✅ Bot is connected!');
-                    console.log('🔗 Pairing system ready - Use /pair endpoint');
+                    console.log('🔗 Pairing system now ready');
 
                     presenceInterval = setInterval(() => {
                         if (sock?.ws?.readyState === 1) {
@@ -385,6 +418,7 @@ function startBot() {
                     console.log(`💖 Status auto-react: ${STATUS_CONFIG.AUTO_LIKE_STATUS ? '✅ Enabled' : '❌ Disabled'}`);
                     console.log(`📰 Newsletter auto-follow: ${STATUS_CONFIG.AUTO_FOLLOW_NEWSLETTERS ? '✅ Enabled' : '❌ Disabled'}`);
                     console.log(`🔥 Newsletter auto-react: ${STATUS_CONFIG.AUTO_REACT_NEWSLETTERS ? '✅ Enabled' : '❌ Disabled'}`);
+                    console.log(`🔗 Pairing system: ${canPair ? '✅ Ready' : '❌ Not ready'}`);
                     console.log('================================\n');
                 } else if (connection === 'connecting') {
                     botStatus = 'connecting';
@@ -479,20 +513,19 @@ function startBot() {
     })();
 }
 
-// ===== EXPRESS SERVER WITH PAIRING API ===== //
-const app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// ===== BEAUTIFUL PAIRING INTERFACE ===== //
-app.get('/', (req, res) => {
-    res.send(`
+// ===== BEAUTIFUL WEB DASHBOARD ===== //
+const server = http.createServer((req, res) => {
+    const url = req.url;
+    
+    if (url === '/' || url === '/qr') {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(`
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mercedes WhatsApp Bot - Pairing System</title>
+    <title>Mercedes WhatsApp Bot</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -519,13 +552,12 @@ app.get('/', (req, res) => {
             min-height: 100vh;
             overflow-x: hidden;
             line-height: 1.6;
-            padding: 20px;
         }
         
         .container {
-            max-width: 800px;
+            max-width: 1200px;
             margin: 0 auto;
-            padding: 30px;
+            padding: 30px 20px;
         }
         
         .header {
@@ -566,7 +598,7 @@ app.get('/', (req, res) => {
         }
         
         .header h1 {
-            font-size: 3rem;
+            font-size: 3.8rem;
             margin-bottom: 15px;
             background: linear-gradient(90deg, var(--mercedes-silver), #fff, var(--mercedes-silver));
             -webkit-background-clip: text;
@@ -577,27 +609,99 @@ app.get('/', (req, res) => {
             font-weight: 700;
         }
         
-        .status-badge {
+        .header .tagline {
+            font-size: 1.3rem;
+            color: rgba(192, 192, 192, 0.8);
+            margin-bottom: 40px;
+            font-weight: 300;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .status-container {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            flex-wrap: wrap;
+            margin-bottom: 50px;
+        }
+        
+        .status-card {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 30px;
+            width: 320px;
+            text-align: center;
+            border: 1px solid rgba(192, 192, 192, 0.1);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .status-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 100%;
+            background: linear-gradient(45deg, transparent, rgba(0, 160, 233, 0.05), transparent);
+            transform: translateX(-100%);
+            transition: transform 0.6s;
+        }
+        
+        .status-card:hover::before {
+            transform: translateX(100%);
+        }
+        
+        .status-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.7);
+            border-color: rgba(0, 160, 233, 0.3);
+        }
+        
+        .status-icon {
+            font-size: 3.5rem;
+            margin-bottom: 20px;
             display: inline-block;
-            padding: 10px 25px;
-            border-radius: 50px;
+            padding: 20px;
+            border-radius: 50%;
+            background: rgba(0, 160, 233, 0.1);
+            border: 2px solid rgba(0, 160, 233, 0.2);
+        }
+        
+        .status-connecting { color: #FFA500; }
+        .status-connected { color: #00FF00; }
+        .status-disconnected { color: #FF4444; }
+        
+        .status-card h3 {
+            font-size: 1.4rem;
+            margin-bottom: 15px;
+            color: var(--mercedes-silver);
+            font-weight: 500;
+        }
+        
+        .status-value {
+            font-size: 1.8rem;
             font-weight: 600;
-            font-size: 1.1rem;
-            margin: 20px 0;
+            padding: 12px 25px;
+            border-radius: 50px;
+            display: inline-block;
             letter-spacing: 1px;
         }
         
-        .status-connected { 
+        .connected { 
             background: linear-gradient(135deg, rgba(0, 255, 0, 0.1), rgba(0, 200, 0, 0.2)); 
             color: #00FF00; 
             border: 1px solid rgba(0, 255, 0, 0.3);
         }
-        .status-disconnected { 
+        .disconnected { 
             background: linear-gradient(135deg, rgba(255, 68, 68, 0.1), rgba(200, 50, 50, 0.2)); 
             color: #FF4444; 
             border: 1px solid rgba(255, 68, 68, 0.3);
         }
-        .status-connecting { 
+        .connecting { 
             background: linear-gradient(135deg, rgba(255, 165, 0, 0.1), rgba(200, 130, 0, 0.2)); 
             color: #FFA500; 
             border: 1px solid rgba(255, 165, 0, 0.3);
@@ -614,7 +718,7 @@ app.get('/', (req, res) => {
         }
         
         .pair-section h2 {
-            font-size: 2.2rem;
+            font-size: 2.5rem;
             text-align: center;
             margin-bottom: 30px;
             color: var(--mercedes-silver);
@@ -633,7 +737,7 @@ app.get('/', (req, res) => {
             margin-bottom: 40px;
             color: rgba(255, 255, 255, 0.7);
             font-size: 1.1rem;
-            max-width: 600px;
+            max-width: 700px;
             margin-left: auto;
             margin-right: auto;
         }
@@ -653,66 +757,6 @@ app.get('/', (req, res) => {
             font-size: 1.1rem;
             color: var(--mercedes-silver);
             font-weight: 500;
-        }
-        
-        .country-selector {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
-        
-        .country-flag {
-            width: 50px;
-            height: 50px;
-            border-radius: 8px;
-            overflow: hidden;
-            cursor: pointer;
-            border: 2px solid transparent;
-            transition: all 0.3s;
-        }
-        
-        .country-flag:hover {
-            border-color: var(--mercedes-blue);
-            transform: scale(1.05);
-        }
-        
-        .country-flag.selected {
-            border-color: var(--mercedes-blue);
-            box-shadow: 0 0 15px rgba(0, 160, 233, 0.5);
-        }
-        
-        .country-flag img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        
-        .phone-input-container {
-            display: flex;
-            gap: 15px;
-            align-items: center;
-        }
-        
-        .country-code {
-            flex: 0 0 100px;
-        }
-        
-        .country-code input {
-            width: 100%;
-            padding: 18px 20px;
-            background: var(--input-bg);
-            border: 1px solid rgba(192, 192, 192, 0.3);
-            border-radius: 12px;
-            color: white;
-            font-size: 1.1rem;
-            text-align: center;
-            font-weight: 500;
-        }
-        
-        .phone-input {
-            flex: 1;
         }
         
         .phone-input input {
@@ -758,7 +802,6 @@ app.get('/', (req, res) => {
             gap: 12px;
             letter-spacing: 0.5px;
             text-transform: uppercase;
-            margin: 10px;
         }
         
         .btn-primary {
@@ -773,10 +816,8 @@ app.get('/', (req, res) => {
             box-shadow: 0 15px 30px rgba(0, 160, 233, 0.4);
         }
         
-        .btn-primary:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
+        .btn-primary:active {
+            transform: translateY(-1px);
         }
         
         .form-actions {
@@ -784,7 +825,6 @@ app.get('/', (req, res) => {
             gap: 20px;
             justify-content: center;
             margin-top: 40px;
-            flex-wrap: wrap;
         }
         
         /* Code Display */
@@ -831,7 +871,7 @@ app.get('/', (req, res) => {
             margin: 25px 0;
             border: 1px solid var(--mercedes-blue);
             display: inline-block;
-            min-width: 300px;
+            min-width: 400px;
             text-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
         }
         
@@ -840,7 +880,6 @@ app.get('/', (req, res) => {
             gap: 15px;
             justify-content: center;
             margin-top: 30px;
-            flex-wrap: wrap;
         }
         
         .instructions {
@@ -877,21 +916,21 @@ app.get('/', (req, res) => {
         .qr-section {
             background: var(--card-bg);
             border-radius: 24px;
-            padding: 40px;
-            margin: 40px 0;
+            padding: 50px;
+            margin: 50px 0;
             text-align: center;
             border: 1px solid var(--mercedes-blue);
             box-shadow: 0 15px 35px rgba(0, 160, 233, 0.2);
         }
         
         .qr-section h2 {
-            font-size: 2rem;
+            font-size: 2.5rem;
             margin-bottom: 25px;
             color: var(--mercedes-silver);
         }
         
         .qr-container {
-            padding: 25px;
+            padding: 30px;
             background: white;
             border-radius: 20px;
             display: inline-block;
@@ -901,9 +940,106 @@ app.get('/', (req, res) => {
         }
         
         .qr-container img {
-            width: 250px;
-            height: 250px;
+            width: 300px;
+            height: 300px;
             border-radius: 15px;
+        }
+        
+        /* Footer */
+        .footer {
+            text-align: center;
+            margin-top: 80px;
+            padding-top: 40px;
+            border-top: 1px solid rgba(192, 192, 192, 0.2);
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.95rem;
+        }
+        
+        .footer-info {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            flex-wrap: wrap;
+            margin-bottom: 30px;
+        }
+        
+        .footer-info span {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2.5rem;
+            }
+            
+            .status-container {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .status-card {
+                width: 100%;
+                max-width: 400px;
+            }
+            
+            .form-actions {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .btn {
+                width: 100%;
+                max-width: 300px;
+            }
+            
+            .pairing-code {
+                font-size: 2.2rem;
+                letter-spacing: 5px;
+                min-width: auto;
+                padding: 20px;
+            }
+            
+            .qr-container img {
+                width: 250px;
+                height: 250px;
+            }
+            
+            .code-display {
+                padding: 25px;
+                margin: 25px 15px;
+            }
+        }
+        
+        /* Animations */
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: var(--mercedes-blue);
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .hidden {
+            display: none;
         }
         
         /* Notification */
@@ -947,59 +1083,6 @@ app.get('/', (req, res) => {
         .notification.show {
             display: flex;
         }
-        
-        .loading {
-            display: inline-block;
-            width: 24px;
-            height: 24px;
-            border: 3px solid rgba(255,255,255,.3);
-            border-radius: 50%;
-            border-top-color: var(--mercedes-blue);
-            animation: spin 1s ease-in-out infinite;
-        }
-        
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        
-        /* Responsive */
-        @media (max-width: 768px) {
-            .container {
-                padding: 15px;
-            }
-            
-            .header {
-                padding: 30px 20px;
-            }
-            
-            .header h1 {
-                font-size: 2.2rem;
-            }
-            
-            .pair-section {
-                padding: 30px 20px;
-            }
-            
-            .phone-input-container {
-                flex-direction: column;
-            }
-            
-            .country-code {
-                width: 100%;
-            }
-            
-            .pairing-code {
-                font-size: 2.2rem;
-                letter-spacing: 5px;
-                min-width: auto;
-                padding: 20px;
-            }
-            
-            .qr-container img {
-                width: 200px;
-                height: 200px;
-            }
-        }
     </style>
 </head>
 <body>
@@ -1014,81 +1097,86 @@ app.get('/', (req, res) => {
                 </div>
             </div>
             <h1>Mercedes WhatsApp Bot</h1>
-            <p style="color: rgba(255,255,255,0.8); margin-bottom: 20px;">
-                Premium Direct Pairing System with Working Pairing Codes
-            </p>
+            <p class="tagline">Premium WhatsApp Automation with Working Pairing System</p>
             
-            <div class="status-badge ${botStatus}">
-                ${botStatus.toUpperCase()} ${canPair ? '- PAIRING READY' : '- WAITING FOR QR'}
+            <!-- Status Cards -->
+            <div class="status-container">
+                <div class="status-card">
+                    <div class="status-icon">
+                        <i class="fas fa-signal"></i>
+                    </div>
+                    <h3>Connection Status</h3>
+                    <div class="status-value ${botStatus}">${botStatus.toUpperCase()}</div>
+                </div>
+                
+                <div class="status-card">
+                    <div class="status-icon">
+                        <i class="fas fa-key"></i>
+                    </div>
+                    <h3>Pairing System</h3>
+                    <div class="status-value ${canPair ? 'connected' : 'disconnected'}">
+                        ${canPair ? 'READY' : 'WAIT FOR QR'}
+                    </div>
+                </div>
+                
+                <div class="status-card">
+                    <div class="status-icon">
+                        <i class="fas fa-server"></i>
+                    </div>
+                    <h3>Server Status</h3>
+                    <div class="status-value" style="color: var(--mercedes-silver); background: rgba(0,160,233,0.1); border: 1px solid rgba(0,160,233,0.3);">
+                        ONLINE
+                    </div>
+                </div>
             </div>
-            
-            <p style="color: rgba(255,255,255,0.6);">
-                <i class="fas fa-info-circle"></i> Bot must be connected via QR first, then you can use pairing
-            </p>
         </div>
         
-        <!-- QR Section (if connecting) -->
+        <!-- QR Section (always shown when connecting) -->
         ${botStatus === 'connecting' && latestQR ? `
         <div class="qr-section">
-            <h2><i class="fas fa-qrcode"></i> Scan QR Code First</h2>
-            <p>Scan this QR code with WhatsApp to connect the bot</p>
+            <h2><i class="fas fa-qrcode"></i> Scan QR Code</h2>
+            <p>Scan this QR code with WhatsApp to link your device</p>
             
             <div class="qr-container">
                 <img src="${latestQR}" alt="WhatsApp QR Code">
             </div>
             
             <p style="color: rgba(255,255,255,0.7); margin-top: 20px;">
-                <i class="fas fa-info-circle"></i> After scanning, the pairing system will be activated
+                <i class="fas fa-info-circle"></i> After scanning, you can also use pairing codes
+            </p>
+        </div>
+        ` : botStatus === 'connected' ? `
+        <div class="qr-section">
+            <h2><i class="fas fa-check-circle"></i> Bot Connected</h2>
+            <p>✅ Mercedes bot is now connected and ready!</p>
+            <p style="color: #00FF00; font-weight: 500; margin-top: 15px;">
+                <i class="fas fa-key"></i> Pairing system is now active - you can use pairing codes below
             </p>
         </div>
         ` : ''}
         
-        <!-- Pairing Section -->
+        <!-- Pairing Section (always shown) -->
         <div class="pair-section" id="pairSection">
             <h2><i class="fas fa-mobile-alt"></i> Pair with Phone Number</h2>
             
             <p class="pair-description">
-                Enter your phone number below to receive a 6-digit pairing code.<br>
-                The code will be valid for 2 minutes. No country code needed - select your country below.
+                ${canPair ? 
+                    '✅ Pairing system ready! Enter any phone number to get a pairing code.' : 
+                    '⏳ Please scan QR code first. Pairing will activate after connection.'
+                }
             </p>
             
             <div class="phone-form">
                 <div class="form-group">
-                    <label><i class="fas fa-globe"></i> Select Your Country</label>
-                    <div class="country-selector" id="countrySelector">
-                        <div class="country-flag selected" data-code="91" title="India">
-                            <img src="https://flagcdn.com/w40/in.png" alt="India">
-                        </div>
-                        <div class="country-flag" data-code="1" title="USA">
-                            <img src="https://flagcdn.com/w40/us.png" alt="USA">
-                        </div>
-                        <div class="country-flag" data-code="44" title="UK">
-                            <img src="https://flagcdn.com/w40/gb.png" alt="UK">
-                        </div>
-                        <div class="country-flag" data-code="971" title="UAE">
-                            <img src="https://flagcdn.com/w40/ae.png" alt="UAE">
-                        </div>
-                        <div class="country-flag" data-code="92" title="Pakistan">
-                            <img src="https://flagcdn.com/w40/pk.png" alt="Pakistan">
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="form-group">
                     <label><i class="fas fa-phone"></i> Phone Number</label>
-                    <div class="phone-input-container">
-                        <div class="country-code">
-                            <input type="text" id="countryCode" value="+91" readonly>
-                        </div>
-                        <div class="phone-input">
-                            <input type="tel" id="phoneNumber" 
-                                   placeholder="Enter your phone number without country code"
-                                   pattern="[0-9]{8,12}"
-                                   required>
-                        </div>
+                    <div class="phone-input">
+                        <input type="tel" id="phoneNumber" 
+                               placeholder="Enter full international number with country code"
+                               ${!canPair ? 'disabled' : ''}
+                               required>
                     </div>
                     <p class="form-note">
-                        Example: For Indian number +91-9876543210, enter "9876543210"
+                        Examples: +919876543210, +15551234567, +447911123456
                     </p>
                 </div>
                 
@@ -1131,6 +1219,7 @@ app.get('/', (req, res) => {
                     <li>Select <strong>"Link with phone number"</strong> option</li>
                     <li>Enter the 6-digit code shown above</li>
                     <li>Tap <strong>Link Device</strong> to connect</li>
+                    <li>The Mercedes bot will automatically activate all features</li>
                 </ol>
                 <p style="margin-top: 15px; color: #FFA500; font-weight: 500;">
                     <i class="fas fa-clock"></i> This code expires in 2 minutes
@@ -1138,58 +1227,80 @@ app.get('/', (req, res) => {
             </div>
         </div>
         
-        <!-- Features Info -->
+        <!-- Info Section -->
         <div style="background: var(--card-bg); border-radius: 20px; padding: 30px; margin: 40px 0; text-align: center;">
             <h3 style="color: var(--mercedes-silver); margin-bottom: 20px; display: flex; align-items: center; justify-content: center; gap: 10px;">
-                <i class="fas fa-bolt"></i> Working Pairing Features
+                <i class="fas fa-bolt"></i> How It Works
             </h3>
-            <div style="display: flex; justify-content: center; gap: 15px; flex-wrap: wrap;">
-                <div style="background: rgba(0,255,0,0.1); padding: 12px 20px; border-radius: 10px; border: 1px solid rgba(0,255,0,0.3);">
-                    <i class="fas fa-check" style="color: #00FF00;"></i> Fixed Number Format
+            <div style="display: flex; justify-content: center; gap: 20px; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 250px; padding: 20px;">
+                    <div style="font-size: 3rem; color: var(--mercedes-blue); margin-bottom: 15px;">
+                        <i class="fas fa-qrcode"></i>
+                    </div>
+                    <h4 style="color: var(--mercedes-silver); margin-bottom: 10px;">1. Scan QR Code</h4>
+                    <p style="color: rgba(255,255,255,0.7);">Scan the QR code to connect the Mercedes bot first</p>
                 </div>
-                <div style="background: rgba(0,160,233,0.1); padding: 12px 20px; border-radius: 10px; border: 1px solid rgba(0,160,233,0.3);">
-                    <i class="fas fa-check" style="color: var(--mercedes-blue);"></i> Custom Pairing Phrase
+                <div style="flex: 1; min-width: 250px; padding: 20px;">
+                    <div style="font-size: 3rem; color: #00FF00; margin-bottom: 15px;">
+                        <i class="fas fa-link"></i>
+                    </div>
+                    <h4 style="color: var(--mercedes-silver); margin-bottom: 10px;">2. Bot Connects</h4>
+                    <p style="color: rgba(255,255,255,0.7);">Bot connects and pairing system becomes active</p>
                 </div>
-                <div style="background: rgba(255,165,0,0.1); padding: 12px 20px; border-radius: 10px; border: 1px solid rgba(255,165,0,0.3);">
-                    <i class="fas fa-check" style="color: #FFA500;"></i> 2-Minute Expiry
-                </div>
-                <div style="background: rgba(255,0,0,0.1); padding: 12px 20px; border-radius: 10px; border: 1px solid rgba(255,0,0,0.3);">
-                    <i class="fas fa-check" style="color: #FF0000;"></i> Error Handling
+                <div style="flex: 1; min-width: 250px; padding: 20px;">
+                    <div style="font-size: 3rem; color: var(--mercedes-red); margin-bottom: 15px;">
+                        <i class="fas fa-key"></i>
+                    </div>
+                    <h4 style="color: var(--mercedes-silver); margin-bottom: 10px;">3. Generate Pair Code</h4>
+                    <p style="color: rgba(255,255,255,0.7);">Enter any phone number to get a pairing code</p>
                 </div>
             </div>
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            <div class="footer-info">
+                <span><i class="fas fa-circle" style="color: ${botStatus === 'connected' ? '#00FF00' : botStatus === 'connecting' ? '#FFA500' : '#FF4444'};"></i> Status: ${botStatus}</span>
+                <span><i class="fas fa-hashtag"></i> Prefix: ${global.BOT_PREFIX}</span>
+                <span><i class="fas fa-clock"></i> Uptime: <span id="uptime">${Math.floor(process.uptime())}s</span></span>
+                <span><i class="fas fa-plug"></i> Pairing: ${canPair ? '✅ Ready' : '⏳ Waiting'}</span>
+            </div>
+            
+            <p>
+                <i class="fas fa-car"></i> Mercedes WhatsApp Bot v2.0 | 
+                Dual Connection System (QR + Pairing)
+            </p>
+            <p style="margin-top: 10px; font-size: 0.85rem; color: rgba(255,255,255,0.5);">
+                &copy; ${new Date().getFullYear()} Mercedes Bot Technologies. 
+                Both QR and Pairing methods available.
+            </p>
         </div>
     </div>
 
     <script>
-        // Initialize country selector
-        const countryFlags = document.querySelectorAll('.country-flag');
-        const countryCodeInput = document.getElementById('countryCode');
-        
-        countryFlags.forEach(flag => {
-            flag.addEventListener('click', () => {
-                countryFlags.forEach(f => f.classList.remove('selected'));
-                flag.classList.add('selected');
-                const code = flag.getAttribute('data-code');
-                countryCodeInput.value = '+' + code;
-            });
-        });
-        
         // Phone number validation
         const phoneInput = document.getElementById('phoneNumber');
         phoneInput.addEventListener('input', (e) => {
-            e.target.value = e.target.value.replace(/\D/g, '');
+            // Allow only numbers and + at the beginning
+            e.target.value = e.target.value.replace(/[^\d+]/g, '');
         });
+        
+        // Uptime counter
+        let uptime = ${Math.floor(process.uptime())};
+        setInterval(() => {
+            uptime++;
+            document.getElementById('uptime').textContent = uptime + 's';
+        }, 1000);
         
         // Generate pairing code
         async function generatePairingCode() {
-            const countryCode = document.getElementById('countryCode').value.replace('+', '');
             const phoneNumber = document.getElementById('phoneNumber').value.trim();
             const generateBtn = document.getElementById('generateBtn');
             const originalText = generateBtn.innerHTML;
             
             // Validation
-            if (!phoneNumber || phoneNumber.length < 8) {
-                showNotification('Please enter a valid phone number (8-12 digits)', 'error');
+            if (!phoneNumber || phoneNumber.length < 10) {
+                showNotification('Please enter a valid phone number (at least 10 digits)', 'error');
                 phoneInput.focus();
                 return;
             }
@@ -1199,31 +1310,28 @@ app.get('/', (req, res) => {
             generateBtn.disabled = true;
             
             try {
-                // Prepare data - full number with country code
-                const fullNumber = countryCode + phoneNumber;
-                
-                console.log('Sending request for:', fullNumber);
+                console.log('Sending request for:', phoneNumber);
                 
                 // Send request to server
                 const response = await fetch('/pair', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
+                        'Content-Type': 'application/x-www-form-urlencoded',
                     },
-                    body: JSON.stringify({
-                        phone: fullNumber,
-                        country: countryCode
+                    body: new URLSearchParams({
+                        phone: phoneNumber
                     })
                 });
                 
-                const data = await response.json();
-                
                 if (!response.ok) {
-                    throw new Error(data.error || data.message || 'Server error');
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || errorData.message || 'Server error');
                 }
                 
+                const data = await response.json();
+                
                 // Display the code
-                document.getElementById('displayPhone').textContent = '+' + fullNumber;
+                document.getElementById('displayPhone').textContent = phoneNumber;
                 document.getElementById('pairingCode').textContent = data.code;
                 document.getElementById('codeDisplay').classList.add('active');
                 
@@ -1241,7 +1349,7 @@ app.get('/', (req, res) => {
                 
                 // If pairing fails, suggest QR
                 if (error.message.includes('not ready') || error.message.includes('QR')) {
-                    showNotification('Please scan QR code first, then try pairing', 'warning');
+                    showNotification('Please scan QR code first to activate pairing', 'warning');
                 }
             } finally {
                 // Reset button
@@ -1282,125 +1390,200 @@ app.get('/', (req, res) => {
             }, 5000);
         }
         
+        // Auto-refresh if not connected
+        if("${botStatus}" !== "connected") {
+            setTimeout(() => {
+                if("${botStatus}" === "connecting") {
+                    location.reload();
+                }
+            }, 10000);
+        }
+        
         // Check if pairing is ready
         if(!${canPair}) {
-            phoneInput.disabled = true;
+            phoneInput.placeholder = "Scan QR code first to activate pairing";
             document.getElementById('generateBtn').innerHTML = '<i class="fas fa-hourglass-half"></i> Waiting for QR Connection';
-            document.getElementById('generateBtn').disabled = true;
-            showNotification('Please scan QR code first to activate pairing system', 'warning');
+            showNotification('Please scan the QR code first to connect the bot', 'warning');
         }
     </script>
 </body>
 </html>
-    `);
-});
-
-// ===== PAIRING API ENDPOINT ===== //
-app.post('/pair', async (req, res) => {
-    try {
-        const { phone } = req.body;
-        
-        if (!phone) {
-            return res.status(400).json({ 
-                error: 'Phone number required',
-                message: 'Please provide a phone number'
-            });
-        }
-        
-        // Validate bot is ready for pairing
-        if (!canPair || !sock) {
-            return res.status(400).json({ 
-                error: 'Bot not ready for pairing',
-                message: 'Please connect via QR code first',
-                status: botStatus,
-                canPair: canPair
-            });
-        }
-        
-        // Generate pairing code
-        const pairingCode = await generatePairingCode(phone);
-        
-        // Send success response
-        res.status(200).json({ 
-            code: pairingCode,
-            phone: phone,
-            timestamp: new Date().toISOString(),
-            expires: '2 minutes',
-            instructions: 'Use in WhatsApp: Settings > Linked Devices > Link with phone number'
+        `);
+    } 
+    
+    else if (url === '/pair' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const params = new URLSearchParams(body);
+                const phoneNumber = params.get('phone').trim();
+                
+                if (!phoneNumber) {
+                    res.writeHead(200, { 
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    });
+                    res.end(JSON.stringify({ error: 'Phone number required' }));
+                    return;
+                }
+                
+                // Validate bot is ready for pairing
+                if (!canPair || !sock) {
+                    res.writeHead(200, { 
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    });
+                    res.end(JSON.stringify({ 
+                        error: 'Bot not ready for pairing',
+                        message: 'Please connect via QR code first',
+                        status: botStatus,
+                        canPair: canPair
+                    }));
+                    return;
+                }
+                
+                // Generate pairing code
+                const pairingCode = await generatePairingCode(phoneNumber);
+                
+                // Send success response
+                res.writeHead(200, { 
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                });
+                res.end(JSON.stringify({ 
+                    code: pairingCode,
+                    phone: phoneNumber,
+                    timestamp: new Date().toISOString(),
+                    expires: '2 minutes'
+                }));
+                
+            } catch (error) {
+                console.error('❌ Pairing API error:', error);
+                res.writeHead(200, { 
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                });
+                res.end(JSON.stringify({ 
+                    error: error.message || 'Failed to generate pairing code'
+                }));
+            }
         });
-        
-    } catch (error) {
-        console.error('❌ Pairing API error:', error);
-        res.status(500).json({ 
-            error: error.message || 'Failed to generate pairing code',
-            details: 'Make sure the bot is connected and phone number is valid'
-        });
+        return;
     }
-});
-
-// ===== STATUS API ===== //
-app.get('/api/status', (req, res) => {
-    res.json({ 
-        status: botStatus,
-        canPair: canPair,
-        hasQR: !!latestQR,
-        qr: latestQR,
-        prefix: global.BOT_PREFIX,
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime(),
-        version: '2.0',
-        pairingEnabled: canPair
-    });
-});
-
-// ===== QR CODE ENDPOINT ===== //
-app.get('/qr', (req, res) => {
-    if (latestQR) {
-        res.send(`
+    
+    else if (url === '/api/status') {
+        res.writeHead(200, { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+        });
+        res.end(JSON.stringify({ 
+            status: botStatus,
+            canPair: canPair,
+            hasQR: !!latestQR,
+            qr: latestQR,
+            prefix: global.BOT_PREFIX,
+            timestamp: new Date().toISOString(),
+            uptime: process.uptime(),
+            version: '2.0',
+            features: STATUS_CONFIG
+        }));
+    }
+    
+    else {
+        res.writeHead(404, { 'Content-Type': 'text/html' });
+        res.end(`
         <!DOCTYPE html>
         <html>
         <head>
             <style>
                 body { 
-                    background: #000; 
+                    font-family: 'Poppins', sans-serif;
+                    background: linear-gradient(135deg, #000000, #1a1a1a);
                     color: white; 
-                    text-align: center; 
+                    display: flex; 
+                    justify-content: center; 
+                    align-items: center; 
+                    min-height: 100vh; 
+                    margin: 0; 
+                    padding: 20px; 
+                    text-align: center;
+                }
+                .container { 
+                    max-width: 500px; 
                     padding: 50px; 
-                    font-family: Arial, sans-serif;
+                    background: rgba(0,0,0,0.9); 
+                    border-radius: 24px; 
+                    border: 1px solid #E4002B;
+                    box-shadow: 0 20px 50px rgba(228, 0, 43, 0.2);
                 }
-                img { 
-                    max-width: 300px; 
-                    border: 5px solid #00A0E9; 
-                    border-radius: 15px;
+                .logo { 
+                    font-size: 5rem; 
+                    color: #C0C0C0; 
+                    margin-bottom: 30px; 
+                    text-shadow: 0 0 20px rgba(192, 192, 192, 0.3);
                 }
-                h1 { color: #C0C0C0; }
+                h1 { 
+                    color: #E4002B; 
+                    font-size: 4.5rem; 
+                    margin-bottom: 20px; 
+                    font-weight: 700;
+                }
+                p { 
+                    font-size: 1.3rem; 
+                    margin-bottom: 40px; 
+                    color: #C0C0C0;
+                    line-height: 1.8;
+                }
+                a { 
+                    color: #00A0E9; 
+                    text-decoration: none; 
+                    font-size: 1.2rem; 
+                    border: 2px solid #00A0E9; 
+                    padding: 15px 40px; 
+                    border-radius: 12px; 
+                    transition: all 0.3s; 
+                    display: inline-flex; 
+                    align-items: center; 
+                    gap: 12px;
+                    font-weight: 500;
+                }
+                a:hover { 
+                    background: rgba(0,160,233,0.2); 
+                    transform: translateY(-5px); 
+                    box-shadow: 0 10px 25px rgba(0, 160, 233, 0.3);
+                }
             </style>
         </head>
         <body>
-            <h1>Mercedes Bot QR Code</h1>
-            <img src="${latestQR}" alt="WhatsApp QR Code">
-            <p>Scan this QR code with WhatsApp to connect the bot</p>
+            <div class="container">
+                <div class="logo">
+                    <i class="fas fa-star"></i>
+                </div>
+                <h1>404</h1>
+                <p>The page you're looking for doesn't exist or has been moved.</p>
+                <a href="/">
+                    <i class="fas fa-home"></i> Return to Dashboard
+                </a>
+            </div>
         </body>
         </html>
         `);
-    } else {
-        res.status(404).send('QR code not available yet');
     }
 });
 
-// Start server
-const server = http.createServer(app);
+// Start the server
 server.listen(PORT, () => {
     console.log(`
     ╔══════════════════════════════════════════════════════╗
     ║                                                      ║
     ║     🚗 MERCEDES WHATSAPP BOT v2.0                   ║
-    ║         WITH WORKING PAIRING SYSTEM                 ║
     ║                                                      ║
     ║     🌐 Dashboard: http://localhost:${PORT}           ║
-    ║     📱 Pairing: http://localhost:${PORT}/pair        ║
-    ║     🔗 QR Code: http://localhost:${PORT}/qr          ║
-    ║     📊 Status: http://localhost:${PORT}/api/status   ║
+    ║     📁 Session: ${path.resolve(AUTH_FOLDER)}         ║
+    ║     ⚡ Dual Connection System:                       ║
+    ║       1. Scan QR Code                               ║
+    ║       2. Use Pairing Codes                          ║
     ║                                                      ║
     ╚══════════════════════════════════════════════════════╝
     `);
@@ -1410,8 +1593,8 @@ server.listen(PORT, () => {
     console.log(`💖 Status auto-react: ${STATUS_CONFIG.AUTO_LIKE_STATUS ? '✅ Enabled' : '❌ Disabled'}`);
     console.log(`📰 Newsletter auto-follow: ${STATUS_CONFIG.AUTO_FOLLOW_NEWSLETTERS ? '✅ Enabled' : '❌ Disabled'}`);
     console.log(`🔥 Newsletter auto-react: ${STATUS_CONFIG.AUTO_REACT_NEWSLETTERS ? '✅ Enabled' : '❌ Disabled'}`);
-    console.log(`🔗 Pairing system: ✅ Using custom phrase "MARISELA"`);
-    console.log(`🌍 Countries supported: India, USA, UK, UAE, Pakistan`);
+    console.log(`🔗 Pairing system: ${canPair ? '✅ Ready (after QR)' : '⏳ Waiting for QR'}`);
+    console.log(`📱 Number format: ANY international format (+91, +1, +44, etc.)`);
     console.log('================================\n');
     
     loadPrefix();
