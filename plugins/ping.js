@@ -14,7 +14,7 @@ module.exports = {
             await m.reply('Pinging...');
             const latency = Date.now() - start;
             const info = `> Pong: ${latency} ms`;
-            const imgUrl = 'https://i.ibb.co/39GRRMX2/img-2m0cfk6r.jpg';
+            const imgUrl = 'https://files.catbox.moe/s2ctl7.jpg';
             const author = 'marisel';
             const botname = 'Mercedes';
             const sourceUrl = 'karenbishop.online';
