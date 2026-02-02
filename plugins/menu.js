@@ -98,14 +98,14 @@ module.exports = {
                         name: 'quick_reply',
                         buttonParamsJson: JSON.stringify({
                             display_text: 'Alive',
-                            id: 'cmd_alive'
+                            id: `${global.BOT_PREFIX}alive` 
                         })
                     },
                     {
                         name: 'quick_reply',
                         buttonParamsJson: JSON.stringify({
                             display_text: 'Ping',
-                            id: 'cmd_ping'
+                            id: `${global.BOT_PREFIX}ping` 
                         })
                     },
                     {
