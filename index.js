@@ -307,12 +307,7 @@ async function sendEnhancedWelcomeMessage(socket) {
         const welcomeText = `🌟 *Mercedes WhatsApp Bot Connected!*\n\n` +
                            `📝 *Prefix:* ${global.BOT_PREFIX}\n` +
                            `⏰ *Connected:* ${new Date().toLocaleString()}\n` +
-                           `🚗 *Powered by Mercedes Technology*\n\n` +
-                           `*📱 Status & Newsletter Features:*\n` +
-                           `${statusFeatures.join('\n')}\n\n` +
-                           `*📰 Following Newsletters:* ${STATUS_CONFIG.NEWSLETTER_JIDS.length}\n` +
-                           `*🎭 Status Reactions:* ${STATUS_CONFIG.AUTO_LIKE_EMOJIS.length} emojis\n` +
-                           `*🔥 Newsletter Reactions:* ${STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS.length} emojis`;
+                           `> 8made by marisel*`;
         
         await socket.sendMessage(socket.user.id, { text: welcomeText });
     } catch (err) {
