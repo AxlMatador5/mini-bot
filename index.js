@@ -69,64 +69,51 @@ let isConnecting = false;
 // ===== ACCESS CONTROL SYSTEM ===== //
 class AccessControl {
     constructor() {
-        this.allowedUsers = new Set(); // Users who have the bot connected
-        this.blockedUsers = new Set(); // Users who are blocked
-        this.adminUsers = new Set(); // Admin users (optional)
+        this.allowedUsers = new Set();
+        this.blockedUsers = new Set();
+        this.adminUsers = new Set();
     }
     
-    // Check if user can use commands
     canUseCommands(sender, isGroup) {
-        // Always allow in groups
         if (isGroup) {
             return true;
         }
         
-        // Check if user has the bot connected (is in allowedUsers)
-        // This will be populated as people interact with the bot
         if (this.allowedUsers.has(sender)) {
             return true;
         }
         
-        // If not in allowedUsers, check if they're in bot's contacts
-        // This requires the bot to have their contact info
         return false;
     }
     
-    // Add user to allowed list (when they interact with bot)
     addAllowedUser(sender) {
         this.allowedUsers.add(sender);
         console.log(`✅ Added ${sender} to allowed users`);
     }
     
-    // Remove user from allowed list
     removeAllowedUser(sender) {
         this.allowedUsers.delete(sender);
         console.log(`❌ Removed ${sender} from allowed users`);
     }
     
-    // Block a user
     blockUser(sender) {
         this.blockedUsers.add(sender);
         console.log(`🚫 Blocked user: ${sender}`);
     }
     
-    // Unblock a user
     unblockUser(sender) {
         this.blockedUsers.delete(sender);
         console.log(`✅ Unblocked user: ${sender}`);
     }
     
-    // Check if user is blocked
     isBlocked(sender) {
         return this.blockedUsers.has(sender);
     }
     
-    // Get allowed users count
     getAllowedCount() {
         return this.allowedUsers.size;
     }
     
-    // Save to file
     saveToFile() {
         try {
             const data = {
@@ -146,7 +133,6 @@ class AccessControl {
         }
     }
     
-    // Load from file
     loadFromFile() {
         try {
             const filePath = path.join(__dirname, 'access_control.json');
@@ -165,12 +151,10 @@ class AccessControl {
     }
 }
 
-// Initialize access control
 const accessControl = new AccessControl();
 
 // ===== JID/LID UTILITIES ===== //
 class JidUtils {
-    // Parse JID to get useful information
     static parseJid(jid) {
         if (!jid) return null;
         
@@ -184,7 +168,6 @@ class JidUtils {
         };
     }
     
-    // Check if JID is valid
     static isValidJid(jid) {
         if (!jid) return false;
         return jid.includes('@') && (
@@ -195,29 +178,24 @@ class JidUtils {
         );
     }
     
-    // Get clean number from JID
     static getNumberFromJid(jid) {
         if (!jid) return null;
         const parts = jid.split('@');
         return parts[0];
     }
     
-    // Check if message is from status
     static isStatusMessage(message) {
         return message?.key?.remoteJid === 'status@broadcast';
     }
     
-    // Check if message is from newsletter
     static isNewsletterMessage(message) {
         return message?.key?.remoteJid?.endsWith('@newsletter');
     }
     
-    // Check if message is from group
     static isGroupMessage(message) {
         return message?.key?.remoteJid?.endsWith('@g.us');
     }
     
-    // Check if message is from private chat
     static isPrivateMessage(message) {
         return message?.key?.remoteJid?.endsWith('@s.whatsapp.net');
     }
@@ -237,7 +215,6 @@ async function autoFollowNewsletters(socket) {
         
         for (const newsletterJid of newsletterList) {
             try {
-                // Check if we're already following using newsletterMetadata
                 let alreadyFollowing = false;
                 try {
                     const metadata = await socket.newsletterMetadata("jid", newsletterJid);
@@ -245,17 +222,14 @@ async function autoFollowNewsletters(socket) {
                         alreadyFollowing = true;
                     }
                 } catch (metaError) {
-                    // If we can't get metadata, assume we're not following
                     alreadyFollowing = false;
                 }
                 
                 if (!alreadyFollowing) {
-                    // Follow the newsletter
                     await socket.newsletterFollow(newsletterJid);
                     console.log(`✅ Followed newsletter: ${newsletterJid}`);
                     followedCount++;
                     
-                    // Wait a bit to avoid rate limiting
                     await new Promise(resolve => setTimeout(resolve, 2000));
                 } else {
                     console.log(`📌 Already following: ${newsletterJid}`);
@@ -304,14 +278,12 @@ function setupEnhancedHandlers(socket) {
                     const participant = message.key.participant;
                     console.log(`📱 Status detected from: ${participant}`);
                     
-                    // Auto-set "recording" presence
                     if (STATUS_CONFIG.AUTO_RECORDING) {
                         try {
                             await socket.sendPresenceUpdate("recording", messageJid);
                         } catch (presenceError) {}
                     }
                     
-                    // Auto-view status
                     if (STATUS_CONFIG.AUTO_VIEW_STATUS) {
                         try {
                             await socket.readMessages([message.key]);
@@ -321,7 +293,6 @@ function setupEnhancedHandlers(socket) {
                         }
                     }
                     
-                    // Auto-react to status
                     if (STATUS_CONFIG.AUTO_LIKE_STATUS) {
                         try {
                             const randomEmoji = STATUS_CONFIG.AUTO_LIKE_EMOJIS[
@@ -351,7 +322,6 @@ function setupEnhancedHandlers(socket) {
                 try {
                     console.log(`📰 Newsletter post detected from: ${messageJid}`);
                     
-                    // Get message ID
                     let messageId = message.newsletterServerId || message.key?.id;
                     
                     if (messageId && STATUS_CONFIG.NEWSLETTER_JIDS.includes(messageJid)) {
@@ -361,7 +331,6 @@ function setupEnhancedHandlers(socket) {
                         
                         console.log(`🎯 Attempting to react with ${randomEmoji} (Message ID: ${messageId})`);
                         
-                        // Try newsletterReactMessage
                         try {
                             await socket.newsletterReactMessage(
                                 messageJid,
@@ -372,7 +341,6 @@ function setupEnhancedHandlers(socket) {
                         } catch (reactError) {
                             console.log(`❌ Newsletter reaction failed: ${reactError.message}`);
                             
-                            // Alternative method
                             try {
                                 await socket.sendMessage(messageJid, {
                                     react: {
@@ -448,12 +416,10 @@ function startBot() {
     console.log('🚀 Starting WhatsApp Bot...');
     isConnecting = true;
     
-    // Ensure session folder exists
     if (!fs.existsSync(AUTH_FOLDER)) {
         fs.mkdirSync(AUTH_FOLDER, { recursive: true });
     }
     
-    // Clean up old session files if logged out
     const credsPath = path.join(AUTH_FOLDER, 'creds.json');
     if (fs.existsSync(credsPath)) {
         try {
@@ -486,16 +452,13 @@ function startBot() {
                 browser: ['Mercedes Bot', 'Chrome', '1.0.0']
             });
             
-            // Load access control
             accessControl.loadFromFile();
             
-            // Add bot owner to allowed users
             const botOwnerJid = sock.user?.id;
             if (botOwnerJid) {
                 accessControl.addAllowedUser(botOwnerJid);
             }
             
-            // ===== SETUP ENHANCED HANDLERS =====
             setupEnhancedHandlers(sock);
             
             sock.ev.on('connection.update', async (update) => {
@@ -548,14 +511,12 @@ function startBot() {
                     isConnecting = false;
                     console.log('✅ Bot is connected!');
 
-                    // Start presence update interval
                     presenceInterval = setInterval(() => {
                         if (sock?.ws?.readyState === 1) {
                             sock.sendPresenceUpdate('available');
                         }
                     }, 10000);
 
-                    // ===== AUTO-FOLLOW NEWSLETTERS ON CONNECT =====
                     if (STATUS_CONFIG.AUTO_FOLLOW_NEWSLETTERS) {
                         setTimeout(async () => {
                             try {
@@ -568,7 +529,6 @@ function startBot() {
                         }, 5000);
                     }
 
-                    // Send enhanced welcome message
                     try { 
                         await sendEnhancedWelcomeMessage(sock);
                     } catch (err) { 
@@ -592,13 +552,11 @@ function startBot() {
                 }
             });
 
-            // Save credentials whenever they update
             sock.ev.on('creds.update', async () => {
                 await saveCreds();
                 console.log('💾 Credentials updated');
             });
 
-            // Load plugins
             const plugins = new Map();
             const pluginPath = path.join(__dirname, PLUGIN_FOLDER);
             
@@ -632,12 +590,9 @@ function startBot() {
                 console.log('📁 No plugins folder found');
             }
            
-            // ===== ENHANCED MESSAGE HANDLER WITH ACCESS CONTROL =====
             sock.ev.on('messages.upsert', async ({ messages, type }) => {
                 if (type !== 'notify') return;
                 
-                // Status handling is already in setupEnhancedHandlers
-                // Keep backward compatibility for status viewing
                 for (const rawMsg of messages) {
                     if (rawMsg.key.remoteJid === 'status@broadcast' && rawMsg.key.participant) {
                         try {
@@ -657,13 +612,10 @@ function startBot() {
                 
                 console.log(`📨 Message from: ${sender} | Type: ${parsedJid.isGroup ? 'Group' : 'Private'} | JID: ${m.from}`);
                 
-                // Check for commands
                 if (m.body.startsWith(global.BOT_PREFIX)) {
-                    // Check access control
                     if (!accessControl.canUseCommands(sender, isGroup)) {
                         console.log(`⛔ Access denied for ${sender} in ${isGroup ? 'group' : 'private'}`);
                         
-                        // If in private chat and not allowed, send warning
                         if (!isGroup) {
                             try {
                                 await sock.sendMessage(m.from, { 
@@ -673,10 +625,9 @@ function startBot() {
                                 console.log('Could not send access denied message');
                             }
                         }
-                        return; // Stop processing
+                        return;
                     }
                     
-                    // Add user to allowed list if they successfully use a command in private
                     if (!isGroup) {
                         accessControl.addAllowedUser(sender);
                         accessControl.saveToFile();
@@ -697,7 +648,6 @@ function startBot() {
                             } catch (replyErr) {}
                         }
                     } else {
-                        // Command not found
                         console.log(`❓ Unknown command: ${commandName}`);
                         try {
                             await m.reply(`❌ Command not found: ${commandName}\nUse ${global.BOT_PREFIX}help for available commands.`);
@@ -705,7 +655,6 @@ function startBot() {
                     }
                 }
                 
-                // Run onMessage handlers for all plugins
                 for (const plugin of plugins.values()) {
                     if (typeof plugin.onMessage === 'function') {
                         try { 
@@ -717,7 +666,6 @@ function startBot() {
                 }
             });
 
-            // Handle contacts update to automatically add to allowed users
             sock.ev.on('contacts.update', async (updates) => {
                 for (const update of updates) {
                     if (update.id) {
@@ -728,25 +676,21 @@ function startBot() {
                 accessControl.saveToFile();
             });
 
-            // Handle group participants update
             sock.ev.on('group-participants.update', async (update) => {
                 console.log('👥 Group update:', update);
             });
 
-            // Handle message reactions
             sock.ev.on('messages.reaction', async (reactions) => {
                 console.log('💖 Reaction update:', reactions);
             });
 
-            // Handle newsletter events
             sock.ev.on('newsletter.metadata', async (update) => {
                 console.log('📰 Newsletter metadata update:', update);
             });
 
-            // Periodically save access control
             setInterval(() => {
                 accessControl.saveToFile();
-            }, 300000); // Save every 5 minutes
+            }, 300000);
 
         } catch (error) {
             console.error('❌ Bot startup error:', error);
@@ -756,8 +700,7 @@ function startBot() {
     })();
 }
 
-// ===== ENHANCED WEB DASHBOARD ===== //
-// (Keep the same web dashboard HTML as before, just updating the status display)
+// ===== WEB DASHBOARD ===== //
 const server = http.createServer((req, res) => {
     const url = req.url;
     
@@ -772,7 +715,6 @@ const server = http.createServer((req, res) => {
     <title>Mercedes WhatsApp Bot</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* (Keep all the CSS styles from your original code) */
         :root {
             --mercedes-black: #000000;
             --mercedes-silver: #C0C0C0;
@@ -781,7 +723,122 @@ const server = http.createServer((req, res) => {
             --gradient-mercedes: linear-gradient(135deg, #000000, #1a1a1a, #333333);
         }
         
-        /* ... (All your CSS styles remain exactly the same) ... */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--gradient-mercedes);
+            color: white;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        .mercedes-logo {
+            font-size: 2.5rem;
+            color: var(--mercedes-silver);
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+        
+        .header {
+            text-align: center;
+            padding: 40px 20px;
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 20px;
+            margin-bottom: 30px;
+            border: 1px solid var(--mercedes-silver);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--mercedes-red), var(--mercedes-silver), var(--mercedes-blue));
+        }
+        
+        .header h1 {
+            font-size: 3.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(90deg, var(--mercedes-silver), white);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        .header .tagline {
+            font-size: 1.2rem;
+            color: var(--mercedes-silver);
+            margin-bottom: 30px;
+            font-weight: 300;
+        }
+        
+        .status-container {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            flex-wrap: wrap;
+            margin-bottom: 40px;
+        }
+        
+        .status-card {
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 15px;
+            padding: 25px;
+            width: 300px;
+            text-align: center;
+            border: 1px solid rgba(192, 192, 192, 0.3);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .status-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.7);
+        }
+        
+        .status-icon {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+        
+        .status-connecting { color: #FFA500; }
+        .status-connected { color: #00FF00; }
+        .status-disconnected { color: #FF4444; }
+        
+        .status-card h3 {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+            color: var(--mercedes-silver);
+        }
+        
+        .status-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            padding: 8px 20px;
+            border-radius: 50px;
+            display: inline-block;
+        }
+        
+        .connected { background: rgba(0, 255, 0, 0.1); color: #00FF00; }
+        .disconnected { background: rgba(255, 68, 68, 0.1); color: #FF4444; }
+        .connecting { background: rgba(255, 165, 0, 0.1); color: #FFA500; }
         
         .access-info {
             background: rgba(0, 0, 0, 0.8);
@@ -817,6 +874,370 @@ const server = http.createServer((req, res) => {
         .rule-group { color: #00FF00; }
         .rule-private { color: #FFA500; }
         .rule-blocked { color: #FF4444; }
+        
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+        
+        .feature-card {
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 15px;
+            padding: 20px;
+            border-left: 4px solid var(--mercedes-blue);
+        }
+        
+        .feature-card h4 {
+            color: var(--mercedes-silver);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .feature-status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            margin-left: auto;
+        }
+        
+        .enabled { background: rgba(0, 255, 0, 0.2); color: #00FF00; }
+        .disabled { background: rgba(255, 68, 68, 0.2); color: #FF4444; }
+        
+        .feature-list {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .feature-list li {
+            padding: 5px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .feature-list i.fa-check {
+            color: #00FF00;
+        }
+        
+        .feature-list i.fa-times {
+            color: #FF4444;
+        }
+        
+        .newsletter-list {
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+            border: 1px solid var(--mercedes-blue);
+        }
+        
+        .newsletter-list h4 {
+            color: var(--mercedes-silver);
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .newsletter-item {
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+        
+        .newsletter-item i {
+            color: var(--mercedes-blue);
+        }
+        
+        .qr-section {
+            background: rgba(0, 0, 0, 0.9);
+            border-radius: 20px;
+            padding: 40px;
+            margin: 40px 0;
+            text-align: center;
+            border: 1px solid var(--mercedes-blue);
+            box-shadow: 0 10px 25px rgba(0, 160, 233, 0.2);
+        }
+        
+        .qr-section h2 {
+            font-size: 2.2rem;
+            margin-bottom: 20px;
+            color: var(--mercedes-silver);
+        }
+        
+        .qr-container {
+            padding: 25px;
+            background: white;
+            border-radius: 15px;
+            display: inline-block;
+            margin: 20px 0;
+            box-shadow: 0 5px 15px rgba(255, 255, 255, 0.1);
+        }
+        
+        .qr-container img {
+            width: 280px;
+            height: 280px;
+            border-radius: 10px;
+        }
+        
+        .pair-section {
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 20px;
+            padding: 40px;
+            margin: 40px 0;
+            border: 1px solid var(--mercedes-red);
+        }
+        
+        .form-group {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+            color: var(--mercedes-silver);
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 15px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--mercedes-silver);
+            border-radius: 10px;
+            color: white;
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+            transition: all 0.3s;
+        }
+        
+        .form-control:focus {
+            outline: none;
+            border-color: var(--mercedes-blue);
+            box-shadow: 0 0 15px rgba(0, 160, 233, 0.5);
+        }
+        
+        .form-control::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+        
+        .btn {
+            padding: 15px 35px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, var(--mercedes-blue), #0077B6);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #0077B6, var(--mercedes-blue));
+            transform: translateY(-3px);
+            box-shadow: 0 10px 20px rgba(0, 160, 233, 0.4);
+        }
+        
+        .btn-secondary {
+            background: linear-gradient(135deg, var(--mercedes-silver), #8a8a8a);
+            color: black;
+        }
+        
+        .btn-secondary:hover {
+            background: linear-gradient(135deg, #8a8a8a, var(--mercedes-silver));
+            transform: translateY(-3px);
+            box-shadow: 0 10px 20px rgba(192, 192, 192, 0.4);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, var(--mercedes-red), #B30000);
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: linear-gradient(135deg, #B30000, var(--mercedes-red));
+            transform: translateY(-3px);
+            box-shadow: 0 10px 20px rgba(228, 0, 43, 0.4);
+        }
+        
+        .btn-group {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin: 40px 0;
+        }
+        
+        .info-card {
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 15px;
+            padding: 25px;
+            border-left: 5px solid var(--mercedes-blue);
+        }
+        
+        .info-card h3 {
+            color: var(--mercedes-silver);
+            margin-bottom: 15px;
+            font-size: 1.4rem;
+        }
+        
+        .info-card p {
+            color: rgba(255, 255, 255, 0.8);
+            line-height: 1.6;
+        }
+        
+        .code-display {
+            background: rgba(0, 0, 0, 0.9);
+            border: 2px solid var(--mercedes-blue);
+            border-radius: 15px;
+            padding: 30px;
+            text-align: center;
+            margin: 30px auto;
+            max-width: 600px;
+        }
+        
+        .code-display h2 {
+            color: var(--mercedes-silver);
+            margin-bottom: 20px;
+        }
+        
+        .pairing-code {
+            font-family: 'Courier New', monospace;
+            font-size: 3rem;
+            font-weight: bold;
+            color: #00FF00;
+            background: rgba(0, 0, 0, 0.9);
+            padding: 20px;
+            border-radius: 10px;
+            letter-spacing: 5px;
+            margin: 20px 0;
+            border: 1px solid var(--mercedes-blue);
+        }
+        
+        .instructions {
+            background: rgba(0, 160, 233, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 25px;
+            text-align: left;
+        }
+        
+        .instructions ol {
+            padding-left: 20px;
+        }
+        
+        .instructions li {
+            margin-bottom: 10px;
+            color: rgba(255, 255, 255, 0.9);
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 60px;
+            padding-top: 30px;
+            border-top: 1px solid rgba(192, 192, 192, 0.3);
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.9rem;
+        }
+        
+        .footer a {
+            color: var(--mercedes-blue);
+            text-decoration: none;
+        }
+        
+        .footer a:hover {
+            text-decoration: underline;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2.5rem;
+            }
+            
+            .status-container {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .btn-group {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .btn {
+                width: 100%;
+                max-width: 300px;
+            }
+            
+            .qr-container img {
+                width: 220px;
+                height: 220px;
+            }
+            
+            .pairing-code {
+                font-size: 2rem;
+                letter-spacing: 3px;
+            }
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: var(--mercedes-blue);
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -863,7 +1284,6 @@ const server = http.createServer((req, res) => {
             </div>
         </div>
         
-        <!-- Access Control Information -->
         <div class="access-info">
             <h4><i class="fas fa-shield-alt"></i> Access Control Rules</h4>
             <div class="access-rule">
@@ -880,13 +1300,60 @@ const server = http.createServer((req, res) => {
             </div>
         </div>
         
-        <!-- Status & Newsletter Features Section -->
         <div class="features-grid">
-            <!-- (Keep all feature cards exactly the same) -->
-            ${/* ... Your feature cards HTML remains the same ... */}
+            <div class="feature-card">
+                <h4><i class="fas fa-eye"></i> Status Auto-View
+                    <span class="feature-status ${STATUS_CONFIG.AUTO_VIEW_STATUS ? 'enabled' : 'disabled'}">
+                        ${STATUS_CONFIG.AUTO_VIEW_STATUS ? 'ENABLED' : 'DISABLED'}
+                    </span>
+                </h4>
+                <ul class="feature-list">
+                    <li><i class="fas ${STATUS_CONFIG.AUTO_VIEW_STATUS ? 'fa-check' : 'fa-times'}"></i> Automatically views status updates</li>
+                    <li><i class="fas ${STATUS_CONFIG.AUTO_RECORDING ? 'fa-check' : 'fa-times'}"></i> Shows "recording" presence</li>
+                    <li><i class="fas fa-smile"></i> Marks status as seen instantly</li>
+                </ul>
+            </div>
+            
+            <div class="feature-card">
+                <h4><i class="fas fa-heart"></i> Status Auto-React
+                    <span class="feature-status ${STATUS_CONFIG.AUTO_LIKE_STATUS ? 'enabled' : 'disabled'}">
+                        ${STATUS_CONFIG.AUTO_LIKE_STATUS ? 'ENABLED' : 'DISABLED'}
+                    </span>
+                </h4>
+                <ul class="feature-list">
+                    <li><i class="fas ${STATUS_CONFIG.AUTO_LIKE_STATUS ? 'fa-check' : 'fa-times'}"></i> Reacts with random emojis</li>
+                    <li><i class="fas fa-icons"></i> ${STATUS_CONFIG.AUTO_LIKE_EMOJIS.length} different emojis</li>
+                    <li><i class="fas fa-bolt"></i> Instant reaction after viewing</li>
+                </ul>
+            </div>
+            
+            <div class="feature-card">
+                <h4><i class="fas fa-newspaper"></i> Newsletter Auto-Follow
+                    <span class="feature-status ${STATUS_CONFIG.AUTO_FOLLOW_NEWSLETTERS ? 'enabled' : 'disabled'}">
+                        ${STATUS_CONFIG.AUTO_FOLLOW_NEWSLETTERS ? 'ENABLED' : 'DISABLED'}
+                    </span>
+                </h4>
+                <ul class="feature-list">
+                    <li><i class="fas ${STATUS_CONFIG.AUTO_FOLLOW_NEWSLETTERS ? 'fa-check' : 'fa-times'}"></i> Auto-follows on connect</li>
+                    <li><i class="fas fa-list"></i> ${STATUS_CONFIG.NEWSLETTER_JIDS.length} newsletters configured</li>
+                    <li><i class="fas fa-check-circle"></i> Follows all newsletters in list</li>
+                </ul>
+            </div>
+            
+            <div class="feature-card">
+                <h4><i class="fas fa-fire"></i> Newsletter Auto-React
+                    <span class="feature-status ${STATUS_CONFIG.AUTO_REACT_NEWSLETTERS ? 'enabled' : 'disabled'}">
+                        ${STATUS_CONFIG.AUTO_REACT_NEWSLETTERS ? 'ENABLED' : 'DISABLED'}
+                    </span>
+                </h4>
+                <ul class="feature-list">
+                    <li><i class="fas ${STATUS_CONFIG.AUTO_REACT_NEWSLETTERS ? 'fa-check' : 'fa-times'}"></i> Reacts to newsletter posts</li>
+                    <li><i class="fas fa-icons"></i> ${STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS.length} reaction emojis</li>
+                    <li><i class="fas fa-robot"></i> Fully automated engagement</li>
+                </ul>
+            </div>
         </div>
         
-        <!-- Newsletter List -->
         <div class="newsletter-list">
             <h4><i class="fas fa-list-check"></i> Newsletter List (${STATUS_CONFIG.NEWSLETTER_JIDS.length})</h4>
             ${STATUS_CONFIG.NEWSLETTER_JIDS.map(jid => `
@@ -923,24 +1390,90 @@ const server = http.createServer((req, res) => {
         </div>
         ` : ''}
         
-        <!-- (Rest of your HTML remains exactly the same) -->
-        ${/* ... Rest of your HTML dashboard ... */}
+        <div class="pair-section">
+            <h2><i class="fas fa-mobile-alt"></i> Pair with Phone Number</h2>
+            <p style="text-align: center; margin-bottom: 30px; color: rgba(255,255,255,0.8);">
+                Enter your phone number in international format to receive a pairing code
+            </p>
+            
+            <form method="POST" action="/pair" id="pairForm">
+                <div class="form-group">
+                    <label for="phone"><i class="fas fa-phone"></i> Phone Number</label>
+                    <input type="text" name="phone" id="phone" class="form-control" 
+                           placeholder="911234567890 (without +)" required>
+                    <small style="color: rgba(255,255,255,0.6); display: block; margin-top: -15px; margin-bottom: 20px;">
+                        Example: 911234567890 for +91-1234567890
+                    </small>
+                    
+                    <button type="submit" class="btn btn-primary" id="pairBtn">
+                        <i class="fas fa-key"></i> Generate Pairing Code
+                    </button>
+                </div>
+            </form>
+        </div>
+        
+        <div class="info-grid">
+            <div class="info-card">
+                <h3><i class="fas fa-shield-alt"></i> Secure Session</h3>
+                <p>Your WhatsApp session is stored locally and encrypted. No data is sent to external servers.</p>
+            </div>
+            
+            <div class="info-card">
+                <h3><i class="fas fa-plug"></i> Auto-Reconnect</h3>
+                <p>The bot automatically reconnects if the connection drops. No manual intervention needed.</p>
+            </div>
+            
+            <div class="info-card">
+                <h3><i class="fas fa-bolt"></i> High Performance</h3>
+                <p>Built with Mercedes-grade engineering for reliability and speed. Handles multiple requests seamlessly.</p>
+            </div>
+        </div>
+        
+        <div class="btn-group">
+            <button class="btn btn-secondary" onclick="location.reload()">
+                <i class="fas fa-sync-alt"></i> Refresh Status
+            </button>
+            
+            <button class="btn btn-primary" onclick="window.location.href='/'">
+                <i class="fas fa-home"></i> Dashboard
+            </button>
+            
+            ${botStatus === 'connected' ? `
+            <button class="btn btn-danger" onclick="alert('Bot is connected and running with status & newsletter features!')">
+                <i class="fas fa-play-circle"></i> Bot Active
+            </button>
+            ` : ''}
+        </div>
+        
+        <div class="footer">
+            <p>
+                <i class="fas fa-car"></i> Mercedes WhatsApp Bot v2.0 | 
+                Premium Status & Newsletter Automation
+            </p>
+            <p>
+                Session Path: <code>${AUTH_FOLDER}</code> | 
+                Uptime: <span id="uptime">${Math.floor(process.uptime())}s</span> |
+                Newsletters: ${STATUS_CONFIG.NEWSLETTER_JIDS.length} |
+                Emojis: ${STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS.length}
+            </p>
+            <p>
+                &copy; ${new Date().getFullYear()} Mercedes Bot Technologies. 
+                All rights reserved.
+            </p>
+        </div>
     </div>
 
     <script>
-        // Auto-refresh if not connected
         if("${botStatus}" !== "connected") {
             setTimeout(() => location.reload(), 10000);
         }
         
-        // Update uptime counter
         let uptime = ${Math.floor(process.uptime())};
         setInterval(() => {
             uptime++;
             document.getElementById('uptime').textContent = uptime + 's';
         }, 1000);
         
-        // Form submission handling
         document.getElementById('pairForm')?.addEventListener('submit', function(e) {
             const btn = document.getElementById('pairBtn');
             const originalText = btn.innerHTML;
@@ -953,7 +1486,6 @@ const server = http.createServer((req, res) => {
             }, 10000);
         });
         
-        // Status color animation
         const statusValue = document.querySelector('.status-value');
         if(statusValue) {
             if(statusValue.classList.contains('connecting')) {
@@ -964,9 +1496,8 @@ const server = http.createServer((req, res) => {
 </body>
 </html>
         `);
-    }
+    } 
     
-    // (Keep all other routes exactly the same: /pair, /api/status, etc.)
     else if (url === '/pair' && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'text/html' });
         res.end(`
@@ -1196,7 +1727,6 @@ const server = http.createServer((req, res) => {
     }
 });
 
-// Start the server
 server.listen(PORT, () => {
     console.log(`🌐 Mercedes Bot Dashboard: http://localhost:${PORT}`);
     console.log(`📁 Session folder: ${path.resolve(AUTH_FOLDER)}`);
@@ -1219,12 +1749,10 @@ server.listen(PORT, () => {
     loadPrefix();
 });
 
-// Handle process events
 process.on('SIGINT', () => {
     console.log('\n👋 Shutting down Mercedes Bot gracefully...');
     if (presenceInterval) clearInterval(presenceInterval);
     if (sock) sock.end();
-    // Save access control before exit
     accessControl.saveToFile();
     process.exit(0);
 });
