@@ -304,10 +304,10 @@ async function sendEnhancedWelcomeMessage(socket) {
         if (STATUS_CONFIG.AUTO_FOLLOW_NEWSLETTERS) statusFeatures.push('📰 Auto-follow newsletters');
         if (STATUS_CONFIG.AUTO_REACT_NEWSLETTERS) statusFeatures.push('🔥 Auto-react to newsletters');
         
-        const welcomeText = `🌟 *Mercedes WhatsApp Bot Connected!*\n\n` +
+        const welcomeText = `*Mercedes WhatsApp Bot Connected!*\n\n` +
                            `📝 *Prefix:* ${global.BOT_PREFIX}\n` +
                            `⏰ *Connected:* ${new Date().toLocaleString()}\n` +
-                           `> 8made by marisel*`;
+                           `> *made by marisel*`;
         
         await socket.sendMessage(socket.user.id, { text: welcomeText });
     } catch (err) {
@@ -371,7 +371,7 @@ function startBot() {
                 keepAliveIntervalMs: 10000,
                 markOnlineOnConnect: true,
                 syncFullHistory: false,
-                browser: ['Mercedes Bot', 'Chrome', '1.0.0']
+                browser: ['Mercedes', 'Chrome', '1.0.0']
             });
             
             // ===== SETUP ENHANCED HANDLERS =====
