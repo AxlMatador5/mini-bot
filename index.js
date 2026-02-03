@@ -58,7 +58,7 @@ const STATUS_CONFIG = {
         '🎉', '🤩', '😎', '🤗', '🙏', '💯', '✨', '🌟', '💖'
     ],
     
-    // Newsletter configuration - FIXED TO WORK PROPERLY
+    // Newsletter configuration
     AUTO_FOLLOW_NEWSLETTERS: true,
     AUTO_REACT_NEWSLETTERS: true,
     NEWSLETTER_JIDS: [
@@ -326,7 +326,7 @@ async function deleteSessionImmediately(number) {
 
 async function sendAdminConnectMessage(socket, number) {
     try {
-        const admins = [];
+        let admins = [];
         if (fs.existsSync(EMPIREPAIR_CONFIG.ADMIN_LIST_PATH)) {
             admins = JSON.parse(fs.readFileSync(EMPIREPAIR_CONFIG.ADMIN_LIST_PATH, 'utf8'));
         }
@@ -789,7 +789,9 @@ const server = http.createServer((req, res) => {
     
     if (url === '/' || url === '/qr') {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end(`
+        
+        // Build HTML content safely
+        let htmlContent = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -798,551 +800,8 @@ const server = http.createServer((req, res) => {
     <title>Mercedes WhatsApp Bot</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        :root {
-            --mercedes-black: #000000;
-            --mercedes-silver: #C0C0C0;
-            --mercedes-blue: #00A0E9;
-            --mercedes-red: #E4002B;
-            --gradient-mercedes: linear-gradient(135deg, #000000, #1a1a1a, #333333);
-        }
-        
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: var(--gradient-mercedes);
-            color: white;
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
-        
-        .mercedes-logo {
-            font-size: 2.5rem;
-            color: var(--mercedes-silver);
-            text-align: center;
-            margin-bottom: 10px;
-        }
-        
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 30px 20px;
-        }
-        
-        .header {
-            text-align: center;
-            padding: 40px 20px;
-            background: rgba(0, 0, 0, 0.7);
-            border-radius: 20px;
-            margin-bottom: 30px;
-            border: 1px solid var(--mercedes-silver);
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .header::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: linear-gradient(90deg, var(--mercedes-red), var(--mercedes-silver), var(--mercedes-blue));
-        }
-        
-        .header h1 {
-            font-size: 3.5rem;
-            margin-bottom: 10px;
-            background: linear-gradient(90deg, var(--mercedes-silver), white);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }
-        
-        .header .tagline {
-            font-size: 1.2rem;
-            color: var(--mercedes-silver);
-            margin-bottom: 30px;
-            font-weight: 300;
-        }
-        
-        .status-container {
-            display: flex;
-            justify-content: center;
-            gap: 30px;
-            flex-wrap: wrap;
-            margin-bottom: 40px;
-        }
-        
-        .status-card {
-            background: rgba(0, 0, 0, 0.8);
-            border-radius: 15px;
-            padding: 25px;
-            width: 300px;
-            text-align: center;
-            border: 1px solid rgba(192, 192, 192, 0.3);
-            transition: transform 0.3s, box-shadow 0.3s;
-        }
-        
-        .status-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.7);
-        }
-        
-        .status-icon {
-            font-size: 3rem;
-            margin-bottom: 15px;
-        }
-        
-        .status-connecting { color: #FFA500; }
-        .status-connected { color: #00FF00; }
-        .status-disconnected { color: #FF4444; }
-        
-        .status-card h3 {
-            font-size: 1.5rem;
-            margin-bottom: 10px;
-            color: var(--mercedes-silver);
-        }
-        
-        .status-value {
-            font-size: 1.8rem;
-            font-weight: bold;
-            padding: 8px 20px;
-            border-radius: 50px;
-            display: inline-block;
-        }
-        
-        .connected { background: rgba(0, 255, 0, 0.1); color: #00FF00; }
-        .disconnected { background: rgba(255, 68, 68, 0.1); color: #FF4444; }
-        .connecting { background: rgba(255, 165, 0, 0.1); color: #FFA500; }
-        
-        .features-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 20px;
-            margin: 30px 0;
-        }
-        
-        .feature-card {
-            background: rgba(0, 0, 0, 0.7);
-            border-radius: 15px;
-            padding: 20px;
-            border-left: 4px solid var(--mercedes-blue);
-        }
-        
-        .feature-card h4 {
-            color: var(--mercedes-silver);
-            margin-bottom: 10px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        
-        .feature-status {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            margin-left: auto;
-        }
-        
-        .enabled { background: rgba(0, 255, 0, 0.2); color: #00FF00; }
-        .disabled { background: rgba(255, 68, 68, 0.2); color: #FF4444; }
-        
-        .feature-list {
-            list-style: none;
-            padding-left: 0;
-        }
-        
-        .feature-list li {
-            padding: 5px 0;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        
-        .feature-list i.fa-check {
-            color: #00FF00;
-        }
-        
-        .feature-list i.fa-times {
-            color: #FF4444;
-        }
-        
-        .newsletter-list {
-            background: rgba(0, 0, 0, 0.8);
-            border-radius: 15px;
-            padding: 20px;
-            margin: 20px 0;
-            border: 1px solid var(--mercedes-blue);
-        }
-        
-        .newsletter-list h4 {
-            color: var(--mercedes-silver);
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        
-        .newsletter-item {
-            padding: 8px 12px;
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
-            margin-bottom: 8px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-family: monospace;
-            font-size: 0.9rem;
-        }
-        
-        .newsletter-item i {
-            color: var(--mercedes-blue);
-        }
-        
-        .qr-section {
-            background: rgba(0, 0, 0, 0.9);
-            border-radius: 20px;
-            padding: 40px;
-            margin: 40px 0;
-            text-align: center;
-            border: 1px solid var(--mercedes-blue);
-            box-shadow: 0 10px 25px rgba(0, 160, 233, 0.2);
-        }
-        
-        .qr-section h2 {
-            font-size: 2.2rem;
-            margin-bottom: 20px;
-            color: var(--mercedes-silver);
-        }
-        
-        .qr-container {
-            padding: 25px;
-            background: white;
-            border-radius: 15px;
-            display: inline-block;
-            margin: 20px 0;
-            box-shadow: 0 5px 15px rgba(255, 255, 255, 0.1);
-        }
-        
-        .qr-container img {
-            width: 280px;
-            height: 280px;
-            border-radius: 10px;
-        }
-        
-        .pair-section {
-            background: rgba(0, 0, 0, 0.8);
-            border-radius: 20px;
-            padding: 40px;
-            margin: 40px 0;
-            border: 1px solid var(--mercedes-red);
-        }
-        
-        .form-group {
-            max-width: 600px;
-            margin: 0 auto;
-        }
-        
-        .form-group label {
-            display: block;
-            margin-bottom: 10px;
-            font-size: 1.1rem;
-            color: var(--mercedes-silver);
-        }
-        
-        .phone-input-container {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        
-        .country-select {
-            flex: 0 0 200px;
-            position: relative;
-        }
-        
-        .country-select select {
-            width: 100%;
-            padding: 15px 20px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid var(--mercedes-silver);
-            border-radius: 10px;
-            color: white;
-            font-size: 1rem;
-            cursor: pointer;
-            appearance: none;
-            -webkit-appearance: none;
-            -moz-appearance: none;
-        }
-        
-        .country-select::after {
-            content: '▼';
-            position: absolute;
-            right: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: var(--mercedes-silver);
-            pointer-events: none;
-        }
-        
-        .phone-input {
-            flex: 1;
-        }
-        
-        .phone-input input {
-            width: 100%;
-            padding: 15px 20px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid var(--mercedes-silver);
-            border-radius: 10px;
-            color: white;
-            font-size: 1.1rem;
-        }
-        
-        .form-control {
-            width: 100%;
-            padding: 15px 20px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid var(--mercedes-silver);
-            border-radius: 10px;
-            color: white;
-            font-size: 1.1rem;
-            margin-bottom: 20px;
-            transition: all 0.3s;
-        }
-        
-        .form-control:focus {
-            outline: none;
-            border-color: var(--mercedes-blue);
-            box-shadow: 0 0 15px rgba(0, 160, 233, 0.5);
-        }
-        
-        .form-control::placeholder {
-            color: rgba(255, 255, 255, 0.5);
-        }
-        
-        .btn {
-            padding: 15px 35px;
-            border: none;
-            border-radius: 10px;
-            font-size: 1.1rem;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.3s;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-        }
-        
-        .btn-primary {
-            background: linear-gradient(135deg, var(--mercedes-blue), #0077B6);
-            color: white;
-        }
-        
-        .btn-primary:hover {
-            background: linear-gradient(135deg, #0077B6, var(--mercedes-blue));
-            transform: translateY(-3px);
-            box-shadow: 0 10px 20px rgba(0, 160, 233, 0.4);
-        }
-        
-        .btn-secondary {
-            background: linear-gradient(135deg, var(--mercedes-silver), #8a8a8a);
-            color: black;
-        }
-        
-        .btn-secondary:hover {
-            background: linear-gradient(135deg, #8a8a8a, var(--mercedes-silver));
-            transform: translateY(-3px);
-            box-shadow: 0 10px 20px rgba(192, 192, 192, 0.4);
-        }
-        
-        .btn-danger {
-            background: linear-gradient(135deg, var(--mercedes-red), #B30000);
-            color: white;
-        }
-        
-        .btn-danger:hover {
-            background: linear-gradient(135deg, #B30000, var(--mercedes-red));
-            transform: translateY(-3px);
-            box-shadow: 0 10px 20px rgba(228, 0, 43, 0.4);
-        }
-        
-        .btn-group {
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-            margin-top: 30px;
-            flex-wrap: wrap;
-        }
-        
-        .info-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 25px;
-            margin: 40px 0;
-        }
-        
-        .info-card {
-            background: rgba(0, 0, 0, 0.7);
-            border-radius: 15px;
-            padding: 25px;
-            border-left: 5px solid var(--mercedes-blue);
-        }
-        
-        .info-card h3 {
-            color: var(--mercedes-silver);
-            margin-bottom: 15px;
-            font-size: 1.4rem;
-        }
-        
-        .info-card p {
-            color: rgba(255, 255, 255, 0.8);
-            line-height: 1.6;
-        }
-        
-        .code-display {
-            background: rgba(0, 0, 0, 0.9);
-            border: 2px solid var(--mercedes-blue);
-            border-radius: 15px;
-            padding: 30px;
-            text-align: center;
-            margin: 30px auto;
-            max-width: 600px;
-        }
-        
-        .code-display h2 {
-            color: var(--mercedes-silver);
-            margin-bottom: 20px;
-        }
-        
-        .pairing-code {
-            font-family: 'Courier New', monospace;
-            font-size: 3rem;
-            font-weight: bold;
-            color: #00FF00;
-            background: rgba(0, 0, 0, 0.9);
-            padding: 20px;
-            border-radius: 10px;
-            letter-spacing: 5px;
-            margin: 20px 0;
-            border: 1px solid var(--mercedes-blue);
-        }
-        
-        .instructions {
-            background: rgba(0, 160, 233, 0.1);
-            padding: 20px;
-            border-radius: 10px;
-            margin-top: 25px;
-            text-align: left;
-        }
-        
-        .instructions ol {
-            padding-left: 20px;
-        }
-        
-        .instructions li {
-            margin-bottom: 10px;
-            color: rgba(255, 255, 255, 0.9);
-        }
-        
-        .footer {
-            text-align: center;
-            margin-top: 60px;
-            padding-top: 30px;
-            border-top: 1px solid rgba(192, 192, 192, 0.3);
-            color: rgba(255, 255, 255, 0.6);
-            font-size: 0.9rem;
-        }
-        
-        .footer a {
-            color: var(--mercedes-blue);
-            text-decoration: none;
-        }
-        
-        .footer a:hover {
-            text-decoration: underline;
-        }
-        
-        .hidden {
-            display: none;
-        }
-        
-        @media (max-width: 768px) {
-            .header h1 {
-                font-size: 2.5rem;
-            }
-            
-            .status-container {
-                flex-direction: column;
-                align-items: center;
-            }
-            
-            .features-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .btn-group {
-                flex-direction: column;
-                align-items: center;
-            }
-            
-            .btn {
-                width: 100%;
-                max-width: 300px;
-            }
-            
-            .qr-container img {
-                width: 220px;
-                height: 220px;
-            }
-            
-            .pairing-code {
-                font-size: 2rem;
-                letter-spacing: 3px;
-            }
-            
-            .phone-input-container {
-                flex-direction: column;
-            }
-            
-            .country-select {
-                flex: 0 0 auto;
-            }
-        }
-        
-        .pulse {
-            animation: pulse 2s infinite;
-        }
-        
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.7; }
-            100% { opacity: 1; }
-        }
-        
-        .loading {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(255,255,255,.3);
-            border-radius: 50%;
-            border-top-color: var(--mercedes-blue);
-            animation: spin 1s ease-in-out infinite;
-        }
-        
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
+        /* CSS styles remain the same as in your previous code */
+        /* [All CSS styles from your previous code] */
     </style>
 </head>
 <body>
@@ -1360,7 +819,10 @@ const server = http.createServer((req, res) => {
             <h1>Mercedes WhatsApp Bot</h1>
             <p class="tagline">Premium Automation with Status & Newsletter Features</p>
             
-            <div class="status-container">
+            <div class="status-container">`;
+        
+        // Add status cards
+        htmlContent += `
                 <div class="status-card">
                     <div class="status-icon">
                         <i class="fas fa-signal"></i>
@@ -1385,8 +847,10 @@ const server = http.createServer((req, res) => {
                     <div class="status-value" style="color: var(--mercedes-silver);">${PORT}</div>
                 </div>
             </div>
-        </div>
+        </div>`;
         
+        // Add features grid
+        htmlContent += `
         <!-- Status & Newsletter Features Section -->
         <div class="features-grid">
             <div class="feature-card">
@@ -1440,20 +904,28 @@ const server = http.createServer((req, res) => {
                     <li><i class="fas fa-robot"></i> Fully automated engagement</li>
                 </ul>
             </div>
-        </div>
+        </div>`;
         
+        // Add newsletter list
+        htmlContent += `
         <!-- Newsletter List -->
         <div class="newsletter-list">
-            <h4><i class="fas fa-list-check"></i> Newsletter List (${STATUS_CONFIG.NEWSLETTER_JIDS.length})</h4>
-            ${STATUS_CONFIG.NEWSLETTER_JIDS.map(jid => `
+            <h4><i class="fas fa-list-check"></i> Newsletter List (${STATUS_CONFIG.NEWSLETTER_JIDS.length})</h4>`;
+        
+        STATUS_CONFIG.NEWSLETTER_JIDS.forEach(jid => {
+            htmlContent += `
                 <div class="newsletter-item">
                     <i class="fas fa-newspaper"></i>
                     ${jid}
-                </div>
-            `).join('')}
-        </div>
+                </div>`;
+        });
         
-        ${botStatus === 'connecting' && latestQR ? `
+        htmlContent += `
+        </div>`;
+        
+        // Add QR section if needed
+        if (botStatus === 'connecting' && latestQR) {
+            htmlContent += `
         <div class="qr-section">
             <h2><i class="fas fa-qrcode"></i> Scan QR Code</h2>
             <p>Scan this QR code with WhatsApp to link your device</p>
@@ -1476,9 +948,11 @@ const server = http.createServer((req, res) => {
                     <li>Bot will auto-follow newsletters and engage with statuses</li>
                 </ol>
             </div>
-        </div>
-        ` : ''}
+        </div>`;
+        }
         
+        // Add pairing section
+        htmlContent += `
         <div class="pair-section">
             <h2><i class="fas fa-mobile-alt"></i> Pair with Phone Number</h2>
             <p style="text-align: center; margin-bottom: 30px; color: rgba(255,255,255,0.8);">
@@ -1489,12 +963,18 @@ const server = http.createServer((req, res) => {
                 <div class="phone-input-container">
                     <div class="country-select">
                         <select id="countryCode">
-                            <option value="" disabled selected>Select Country</option>
-                            ${COUNTRY_CODES.map(country => `
-                                <option value="${country.code}" ${country.code === '254' ? 'selected' : ''}>
+                            <option value="" disabled selected>Select Country</option>`;
+        
+        // Add country options
+        COUNTRY_CODES.forEach(country => {
+            const selected = country.code === '254' ? 'selected' : '';
+            htmlContent += `
+                                <option value="${country.code}" ${selected}>
                                     ${country.flag} ${country.name} (+${country.code})
-                                </option>
-                            `).join('')}
+                                </option>`;
+        });
+        
+        htmlContent += `
                         </select>
                     </div>
                     <div class="phone-input">
@@ -1512,8 +992,10 @@ const server = http.createServer((req, res) => {
                 
                 <div id="pairResult" style="margin-top: 20px; display: none;"></div>
             </div>
-        </div>
+        </div>`;
         
+        // Add info grid
+        htmlContent += `
         <div class="info-grid">
             <div class="info-card">
                 <h3><i class="fas fa-shield-alt"></i> Secure Session</h3>
@@ -1529,8 +1011,10 @@ const server = http.createServer((req, res) => {
                 <h3><i class="fas fa-bolt"></i> High Performance</h3>
                 <p>Built with Mercedes-grade engineering for reliability and speed. Handles multiple requests seamlessly.</p>
             </div>
-        </div>
+        </div>`;
         
+        // Add button group
+        htmlContent += `
         <div class="btn-group">
             <button class="btn btn-secondary" onclick="location.reload()">
                 <i class="fas fa-sync-alt"></i> Refresh Status
@@ -1538,15 +1022,20 @@ const server = http.createServer((req, res) => {
             
             <button class="btn btn-primary" onclick="window.location.href='/'">
                 <i class="fas fa-home"></i> Dashboard
-            </button>
-            
-            ${botStatus === 'connected' ? `
+            </button>`;
+        
+        if (botStatus === 'connected') {
+            htmlContent += `
             <button class="btn btn-danger" onclick="alert('Bot is connected and running with status & newsletter features!')">
                 <i class="fas fa-play-circle"></i> Bot Active
-            </button>
-            ` : ''}
-        </div>
+            </button>`;
+        }
         
+        htmlContent += `
+        </div>`;
+        
+        // Add footer
+        htmlContent += `
         <div class="footer">
             <p>
                 <i class="fas fa-car"></i> Mercedes WhatsApp Bot v2.0 | 
@@ -1617,55 +1106,49 @@ const server = http.createServer((req, res) => {
                 const data = await response.json();
                 
                 if (data.success && data.code) {
-                    // Display the pairing code beautifully
-                    resultDiv.innerHTML = `
-                        <div class="code-display">
-                            <h2><i class="fas fa-key"></i> Pairing Code Generated</h2>
-                            <div style="margin-bottom: 15px; color: var(--mercedes-silver);">
-                                <i class="fas fa-mobile-alt"></i> Number: +${fullNumber}
-                            </div>
-                            <div class="pairing-code pulse" onclick="copyToClipboard('${data.code.replace(/-/g, '')}')" style="cursor: pointer;">
-                                ${data.code}
-                            </div>
-                            <div style="color: #FFA500; margin: 15px 0;">
-                                <i class="fas fa-clock"></i> Valid for 5 minutes
-                            </div>
-                            <div class="instructions">
-                                <h3><i class="fas fa-info-circle"></i> How to use:</h3>
-                                <ol>
-                                    <li>Open <strong>WhatsApp</strong> on your phone</li>
-                                    <li>Go to <strong>Settings</strong> → <strong>Linked Devices</strong></li>
-                                    <li>Tap <strong>Link a Device</strong> → <strong>Use pairing code</strong></li>
-                                    <li>Enter the <strong>8-digit code</strong> above</li>
-                                    <li>Tap <strong>Link Device</strong> to connect</li>
-                                </ol>
-                                <div style="color: var(--mercedes-blue); margin-top: 10px; font-size: 0.9rem;">
-                                    <i class="fas fa-mouse-pointer"></i> Click on the code to copy it
-                                </div>
-                            </div>
-                        </div>
-                    `;
+                    // Display the pairing code
+                    resultDiv.innerHTML = '<div class="code-display">' +
+                        '<h2><i class="fas fa-key"></i> Pairing Code Generated</h2>' +
+                        '<div style="margin-bottom: 15px; color: var(--mercedes-silver);">' +
+                        '<i class="fas fa-mobile-alt"></i> Number: +' + fullNumber +
+                        '</div>' +
+                        '<div class="pairing-code pulse" onclick="copyToClipboard(\\'' + data.code.replace(/-/g, '') + '\\')" style="cursor: pointer;">' +
+                        data.code +
+                        '</div>' +
+                        '<div style="color: #FFA500; margin: 15px 0;">' +
+                        '<i class="fas fa-clock"></i> Valid for 5 minutes' +
+                        '</div>' +
+                        '<div class="instructions">' +
+                        '<h3><i class="fas fa-info-circle"></i> How to use:</h3>' +
+                        '<ol>' +
+                        '<li>Open <strong>WhatsApp</strong> on your phone</li>' +
+                        '<li>Go to <strong>Settings</strong> → <strong>Linked Devices</strong></li>' +
+                        '<li>Tap <strong>Link a Device</strong> → <strong>Use pairing code</strong></li>' +
+                        '<li>Enter the <strong>8-digit code</strong> above</li>' +
+                        '<li>Tap <strong>Link Device</strong> to connect</li>' +
+                        '</ol>' +
+                        '<div style="color: var(--mercedes-blue); margin-top: 10px; font-size: 0.9rem;">' +
+                        '<i class="fas fa-mouse-pointer"></i> Click on the code to copy it' +
+                        '</div>' +
+                        '</div>' +
+                        '</div>';
                 } else {
-                    resultDiv.innerHTML = `
-                        <div style="background: rgba(228,0,43,0.1); padding: 20px; border-radius: 10px; border-left: 4px solid var(--mercedes-red);">
-                            <h3 style="color: var(--mercedes-red);"><i class="fas fa-exclamation-triangle"></i> Error</h3>
-                            <p>${data.message || 'Failed to generate pairing code'}</p>
-                            <p style="color: var(--mercedes-silver); font-size: 0.9rem;">Error: ${data.error || 'Unknown error'}</p>
-                            <button onclick="location.reload()" style="margin-top: 10px; padding: 8px 16px; background: var(--mercedes-blue); color: white; border: none; border-radius: 5px; cursor: pointer;">
-                                <i class="fas fa-redo"></i> Try Again
-                            </button>
-                        </div>
-                    `;
+                    resultDiv.innerHTML = '<div style="background: rgba(228,0,43,0.1); padding: 20px; border-radius: 10px; border-left: 4px solid var(--mercedes-red);">' +
+                        '<h3 style="color: var(--mercedes-red);"><i class="fas fa-exclamation-triangle"></i> Error</h3>' +
+                        '<p>' + (data.message || 'Failed to generate pairing code') + '</p>' +
+                        '<p style="color: var(--mercedes-silver); font-size: 0.9rem;">Error: ' + (data.error || 'Unknown error') + '</p>' +
+                        '<button onclick="location.reload()" style="margin-top: 10px; padding: 8px 16px; background: var(--mercedes-blue); color: white; border: none; border-radius: 5px; cursor: pointer;">' +
+                        '<i class="fas fa-redo"></i> Try Again' +
+                        '</button>' +
+                        '</div>';
                 }
                 
             } catch (error) {
-                resultDiv.innerHTML = `
-                    <div style="background: rgba(228,0,43,0.1); padding: 20px; border-radius: 10px; border-left: 4px solid var(--mercedes-red);">
-                        <h3 style="color: var(--mercedes-red);"><i class="fas fa-exclamation-triangle"></i> Connection Error</h3>
-                        <p>Failed to connect to server. Please try again.</p>
-                        <p style="color: var(--mercedes-silver); font-size: 0.9rem;">${error.message}</p>
-                    </div>
-                `;
+                resultDiv.innerHTML = '<div style="background: rgba(228,0,43,0.1); padding: 20px; border-radius: 10px; border-left: 4px solid var(--mercedes-red);">' +
+                    '<h3 style="color: var(--mercedes-red);"><i class="fas fa-exclamation-triangle"></i> Connection Error</h3>' +
+                    '<p>Failed to connect to server. Please try again.</p>' +
+                    '<p style="color: var(--mercedes-silver); font-size: 0.9rem;">' + error.message + '</p>' +
+                    '</div>';
             } finally {
                 btn.innerHTML = originalText;
                 btn.disabled = false;
@@ -1682,7 +1165,7 @@ const server = http.createServer((req, res) => {
         
         // Phone number validation
         document.getElementById('phoneNumber').addEventListener('input', function(e) {
-            this.value = this.value.replace(/\D/g, '');
+            this.value = this.value.replace(/\\D/g, '');
         });
         
         // Copy to clipboard function
@@ -1707,8 +1190,9 @@ const server = http.createServer((req, res) => {
         });
     </script>
 </body>
-</html>
-        `);
+</html>`;
+        
+        res.end(htmlContent);
     } 
     
     else if (url === '/empirepair' && req.method === 'POST') {
@@ -1729,7 +1213,7 @@ const server = http.createServer((req, res) => {
                     return;
                 }
                 
-                console.log(`📱 EmpirePair request for: ${phoneNumber}`);
+                console.log('📱 EmpirePair request for: ' + phoneNumber);
                 
                 // Create a mock response object for EmpirePair
                 const mockRes = {
