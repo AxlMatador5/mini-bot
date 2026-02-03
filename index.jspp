@@ -7,7 +7,6 @@ const QRCode = require('qrcode');
 const { Boom } = require('@hapi/boom');
 const { sendButtons, sendInteractiveMessage } = require('gifted-btns');
 const serializeMessage = require('./handler.js');
-const axios = require('axios'); // Add axios for newsletter list
 
 global.generateWAMessageFromContent = generateWAMessageFromContent;
 global.proto = proto;
@@ -30,32 +29,98 @@ const PORT = process.env.PORT || 3000;
 
 // ===== STATUS & NEWSLETTER CONFIG ===== //
 const STATUS_CONFIG = {
-    AUTO_VIEW_STATUS: true,           // Auto-view statuses
-    AUTO_LIKE_STATUS: true,           // Auto-react to statuses
-    AUTO_RECORDING: true,             // Show "recording" presence
-    AUTO_LIKE_EMOJIS: [               // Emojis for status reactions
+    AUTO_VIEW_STATUS: true,
+    AUTO_LIKE_STATUS: true,
+    AUTO_RECORDING: true,
+    AUTO_LIKE_EMOJIS: [
         '❤️', '🔥', '👍', '😍', '🥰', '😂', '😮', '😢', '👏',
         '🎉', '🤩', '😎', '🤗', '🙏', '💯', '✨', '🌟', '💖'
     ],
     
-    // Newsletter configuration
-    AUTO_FOLLOW_NEWSLETTERS: true,    // Auto-follow newsletters on connect
-    AUTO_REACT_NEWSLETTERS: true,     // Auto-react to newsletter posts
-    NEWSLETTER_REACT_EMOJIS: [        // Emojis for newsletter reactions
-        '❤️', '🔥', '👍', '😍', '🥰', '😂', '😮'
+    // Newsletter configuration - FIXED TO WORK PROPERLY
+    AUTO_FOLLOW_NEWSLETTERS: true,
+    AUTO_REACT_NEWSLETTERS: true,
+    NEWSLETTER_JIDS: [
+        '120363299029326322@newsletter',
+        '120363401297349965@newsletter', 
+        '120363339980514201@newsletter',
+        '120363420947784745@newsletter',
+        '120363296314610373@newsletter'
     ],
-    
-    // Newsletter list (add your newsletter JIDs here)
-    NEWSLETTER_LIST: [
-        '120363299029326322@newsletter',  // Mercedes Mini Bot newsletter
-        // Add more newsletter JIDs here
-        // 'ANOTHER_NEWSLETTER@newsletter'
-    ],
-    
-    // GitHub newsletter list URL (optional - for dynamic newsletter list)
-    NEWSLETTER_GITHUB_URL: 'https://raw.githubusercontent.com/xking6/database/refs/heads/main/newsletter_list.json'
+    NEWSLETTER_REACT_EMOJIS: [
+        '🩵', '🧘', '😀', '👍', '🤭', '😂', '🥹', '🥰', '😍', '🤩', 
+        '😎', '🥳', '😜', '🤗', '🫠', '😢', '😡', '🤯', '🥶', '😴', 
+        '🙄', '🤔', '🐶', '🐱', '🐢', '🦋', '🐙', '🦄', '🦁', '🐝', 
+        '🌸', '🍀', '🌈', '⭐', '🌙', '🍁', '🌵', '🍕', '🍦', '🍩', 
+        '☕', '🧋', '🥑', '🍇', '🍔', '🌮', '🍜', '⚽', '🎮', '🎨', 
+        '✈️', '🚀', '💡', '📚', '🎸', '🛼', '🎯', '💎', '🧩', '🔭', 
+        '❤️', '🔥', '💫', '✨', '💯', '✅', '❌', '🙏'
+    ]
 };
 // ========================= //
+
+// ===== COUNTRY CODES FOR PAIRING ===== //
+const COUNTRY_CODES = [
+    { name: "Afghanistan", code: "93", flag: "🇦🇫" },
+    { name: "Albania", code: "355", flag: "🇦🇱" },
+    { name: "Algeria", code: "213", flag: "🇩🇿" },
+    { name: "Andorra", code: "376", flag: "🇦🇩" },
+    { name: "Angola", code: "244", flag: "🇦🇴" },
+    { name: "Argentina", code: "54", flag: "🇦🇷" },
+    { name: "Australia", code: "61", flag: "🇦🇺" },
+    { name: "Austria", code: "43", flag: "🇦🇹" },
+    { name: "Bahrain", code: "973", flag: "🇧🇭" },
+    { name: "Bangladesh", code: "880", flag: "🇧🇩" },
+    { name: "Belgium", code: "32", flag: "🇧🇪" },
+    { name: "Brazil", code: "55", flag: "🇧🇷" },
+    { name: "Canada", code: "1", flag: "🇨🇦" },
+    { name: "China", code: "86", flag: "🇨🇳" },
+    { name: "Colombia", code: "57", flag: "🇨🇴" },
+    { name: "Egypt", code: "20", flag: "🇪🇬" },
+    { name: "Ethiopia", code: "251", flag: "🇪🇹" },
+    { name: "France", code: "33", flag: "🇫🇷" },
+    { name: "Germany", code: "49", flag: "🇩🇪" },
+    { name: "Ghana", code: "233", flag: "🇬🇭" },
+    { name: "India", code: "91", flag: "🇮🇳" },
+    { name: "Indonesia", code: "62", flag: "🇮🇩" },
+    { name: "Iran", code: "98", flag: "🇮🇷" },
+    { name: "Iraq", code: "964", flag: "🇮🇶" },
+    { name: "Italy", code: "39", flag: "🇮🇹" },
+    { name: "Japan", code: "81", flag: "🇯🇵" },
+    { name: "Jordan", code: "962", flag: "🇯🇴" },
+    { name: "Kenya", code: "254", flag: "🇰🇪" },
+    { name: "Kuwait", code: "965", flag: "🇰🇼" },
+    { name: "Malaysia", code: "60", flag: "🇲🇾" },
+    { name: "Mexico", code: "52", flag: "🇲🇽" },
+    { name: "Morocco", code: "212", flag: "🇲🇦" },
+    { name: "Netherlands", code: "31", flag: "🇳🇱" },
+    { name: "Nigeria", code: "234", flag: "🇳🇬" },
+    { name: "Oman", code: "968", flag: "🇴🇲" },
+    { name: "Pakistan", code: "92", flag: "🇵🇰" },
+    { name: "Philippines", code: "63", flag: "🇵🇭" },
+    { name: "Qatar", code: "974", flag: "🇶🇦" },
+    { name: "Russia", code: "7", flag: "🇷🇺" },
+    { name: "Saudi Arabia", code: "966", flag: "🇸🇦" },
+    { name: "Singapore", code: "65", flag: "🇸🇬" },
+    { name: "South Africa", code: "27", flag: "🇿🇦" },
+    { name: "South Korea", code: "82", flag: "🇰🇷" },
+    { name: "Spain", code: "34", flag: "🇪🇸" },
+    { name: "Sri Lanka", code: "94", flag: "🇱🇰" },
+    { name: "Sweden", code: "46", flag: "🇸🇪" },
+    { name: "Switzerland", code: "41", flag: "🇨🇭" },
+    { name: "Tanzania", code: "255", flag: "🇹🇿" },
+    { name: "Thailand", code: "66", flag: "🇹🇭" },
+    { name: "Turkey", code: "90", flag: "🇹🇷" },
+    { name: "Uganda", code: "256", flag: "🇺🇬" },
+    { name: "Ukraine", code: "380", flag: "🇺🇦" },
+    { name: "United Arab Emirates", code: "971", flag: "🇦🇪" },
+    { name: "United Kingdom", code: "44", flag: "🇬🇧" },
+    { name: "United States", code: "1", flag: "🇺🇸" },
+    { name: "Vietnam", code: "84", flag: "🇻🇳" },
+    { name: "Yemen", code: "967", flag: "🇾🇪" },
+    { name: "Zambia", code: "260", flag: "🇿🇲" },
+    { name: "Zimbabwe", code: "263", flag: "🇿🇼" }
+];
 
 let latestQR = '';
 let botStatus = 'disconnected';
@@ -65,64 +130,49 @@ let sock = null;
 let isConnecting = false;
 
 // ===== NEWSLETTER FUNCTIONS ===== //
-async function loadNewsletterList() {
-    try {
-        // Try to load from GitHub first
-        if (STATUS_CONFIG.NEWSLETTER_GITHUB_URL) {
-            const response = await axios.get(STATUS_CONFIG.NEWSLETTER_GITHUB_URL);
-            if (response.data && Array.isArray(response.data)) {
-                console.log(`📰 Loaded ${response.data.length} newsletters from GitHub`);
-                return response.data;
-            }
-        }
-    } catch (error) {
-        console.log('⚠️ Could not load newsletter list from GitHub, using default list');
-    }
-    
-    // Fallback to default list
-    return STATUS_CONFIG.NEWSLETTER_LIST;
-}
-
 async function autoFollowNewsletters(socket) {
     if (!STATUS_CONFIG.AUTO_FOLLOW_NEWSLETTERS) return;
     
     try {
-        const newsletterList = await loadNewsletterList();
+        const newsletterList = STATUS_CONFIG.NEWSLETTER_JIDS;
         console.log(`📰 Attempting to follow ${newsletterList.length} newsletters...`);
         
         let followedCount = 0;
         let alreadyFollowingCount = 0;
+        let failedCount = 0;
         
         for (const newsletterJid of newsletterList) {
             try {
-                // Check if already following
-                const metadata = await socket.newsletterMetadata("jid", newsletterJid);
+                // Check if we're already following using newsletterMetadata
+                let alreadyFollowing = false;
+                try {
+                    const metadata = await socket.newsletterMetadata("jid", newsletterJid);
+                    if (metadata && metadata.viewer_metadata) {
+                        alreadyFollowing = true;
+                    }
+                } catch (metaError) {
+                    // If we can't get metadata, assume we're not following
+                    alreadyFollowing = false;
+                }
                 
-                if (metadata?.viewer_metadata === null) {
-                    // Not following, so follow it
+                if (!alreadyFollowing) {
+                    // Follow the newsletter
                     await socket.newsletterFollow(newsletterJid);
                     console.log(`✅ Followed newsletter: ${newsletterJid}`);
                     followedCount++;
                     
-                    // React to first message if available
-                    try {
-                        await socket.sendMessage(newsletterJid, { 
-                            react: { text: '❤️', key: { id: '1' } } 
-                        });
-                        console.log(`💖 Reacted to first message in: ${newsletterJid}`);
-                    } catch (reactError) {
-                        // Ignore reaction errors
-                    }
+                    // Wait a bit to avoid rate limiting
+                    await new Promise(resolve => setTimeout(resolve, 2000));
                 } else {
                     console.log(`📌 Already following: ${newsletterJid}`);
                     alreadyFollowingCount++;
                 }
                 
-                // Small delay to avoid rate limiting
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                
             } catch (error) {
-                if (error.message.includes('already subscribed') || error.message.includes('already following')) {
+                failedCount++;
+                if (error.message.includes('already subscribed') || 
+                    error.message.includes('already following') ||
+                    error.message.includes('subscription exists')) {
                     console.log(`📌 Already following: ${newsletterJid}`);
                     alreadyFollowingCount++;
                 } else {
@@ -131,23 +181,30 @@ async function autoFollowNewsletters(socket) {
             }
         }
         
-        console.log(`📊 Newsletter follow results: ${followedCount} newly followed, ${alreadyFollowingCount} already following`);
+        console.log(`📊 Newsletter follow results:`);
+        console.log(`   ✅ Newly followed: ${followedCount}`);
+        console.log(`   📌 Already following: ${alreadyFollowingCount}`);
+        console.log(`   ❌ Failed: ${failedCount}`);
         
     } catch (error) {
         console.error('❌ Newsletter follow error:', error.message);
     }
 }
 
-// ===== STATUS HANDLER ===== //
-function setupStatusHandlers(socket) {
+// ===== ENHANCED STATUS & NEWSLETTER HANDLER ===== //
+function setupEnhancedHandlers(socket) {
+    console.log('📱 Setting up enhanced status & newsletter handlers...');
+    
     socket.ev.on('messages.upsert', async ({ messages, type }) => {
         if (type !== 'notify') return;
         
         for (const message of messages) {
             if (!message?.key) continue;
             
+            const messageJid = message.key.remoteJid;
+            
             // ===== 1. STATUS AUTO-VIEW & REACTION =====
-            if (message.key.remoteJid === 'status@broadcast' && message.key.participant) {
+            if (messageJid === 'status@broadcast' && message.key.participant) {
                 try {
                     const participant = message.key.participant;
                     console.log(`📱 Status detected from: ${participant}`);
@@ -155,7 +212,7 @@ function setupStatusHandlers(socket) {
                     // Auto-set "recording" presence
                     if (STATUS_CONFIG.AUTO_RECORDING) {
                         try {
-                            await socket.sendPresenceUpdate("recording", message.key.remoteJid);
+                            await socket.sendPresenceUpdate("recording", messageJid);
                         } catch (presenceError) {
                             // Ignore presence errors
                         }
@@ -179,7 +236,7 @@ function setupStatusHandlers(socket) {
                             ];
                             
                             await socket.sendMessage(
-                                message.key.remoteJid,
+                                messageJid,
                                 { react: { text: randomEmoji, key: message.key } },
                                 { statusJidList: [participant] }
                             );
@@ -196,18 +253,28 @@ function setupStatusHandlers(socket) {
                 continue;
             }
             
-            // ===== 2. NEWSLETTER AUTO-REACTION =====
+            // ===== 2. NEWSLETTER AUTO-REACTION (FIXED) =====
             if (STATUS_CONFIG.AUTO_REACT_NEWSLETTERS) {
                 try {
-                    const newsletterList = await loadNewsletterList();
-                    const messageJid = message.key.remoteJid;
-                    
                     // Check if message is from a newsletter we should react to
-                    if (newsletterList.includes(messageJid)) {
-                        console.log(`📰 Newsletter post detected: ${messageJid}`);
+                    if (STATUS_CONFIG.NEWSLETTER_JIDS.includes(messageJid)) {
+                        console.log(`📰 Newsletter post detected from: ${messageJid}`);
                         
-                        // Get message ID for reaction
-                        const messageId = message.newsletterServerId || message.key.id;
+                        // Get message ID - try different possible locations
+                        let messageId = null;
+                        
+                        // Try newsletterServerId first
+                        if (message.newsletterServerId) {
+                            messageId = message.newsletterServerId;
+                        }
+                        // Try message key id
+                        else if (message.key?.id) {
+                            messageId = message.key.id;
+                        }
+                        // Try in the message object
+                        else if (message.message?.newsletterServerId) {
+                            messageId = message.message.newsletterServerId;
+                        }
                         
                         if (messageId) {
                             // Random emoji for newsletter reaction
@@ -215,19 +282,76 @@ function setupStatusHandlers(socket) {
                                 Math.floor(Math.random() * STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS.length)
                             ];
                             
-                            // React to newsletter post
-                            await socket.newsletterReactMessage(
-                                messageJid,
-                                messageId.toString(),
-                                randomEmoji
-                            );
+                            console.log(`🎯 Attempting to react to newsletter with ${randomEmoji} (Message ID: ${messageId})`);
                             
-                            console.log(`✅ Newsletter reacted with ${randomEmoji}`);
+                            // Try newsletterReactMessage first (official method)
+                            try {
+                                await socket.newsletterReactMessage(
+                                    messageJid,
+                                    messageId.toString(),
+                                    randomEmoji
+                                );
+                                console.log(`✅ Newsletter reaction sent via newsletterReactMessage: ${randomEmoji}`);
+                            } catch (reactError) {
+                                console.log(`❌ newsletterReactMessage failed, trying alternative method: ${reactError.message}`);
+                                
+                                // Alternative method: Use sendMessage with react
+                                try {
+                                    await socket.sendMessage(messageJid, {
+                                        react: {
+                                            text: randomEmoji,
+                                            key: {
+                                                remoteJid: messageJid,
+                                                id: messageId,
+                                                fromMe: false
+                                            }
+                                        }
+                                    });
+                                    console.log(`✅ Newsletter reaction sent via sendMessage: ${randomEmoji}`);
+                                } catch (altError) {
+                                    console.log(`❌ Alternative reaction failed: ${altError.message}`);
+                                }
+                            }
+                        } else {
+                            console.log('❌ Could not find message ID for newsletter reaction');
                         }
                     }
                 } catch (error) {
-                    // Silently ignore newsletter reaction errors
-                    // console.log('Newsletter reaction error:', error.message);
+                    console.error('❌ Newsletter reaction error:', error.message);
+                }
+            }
+        }
+    });
+    
+    // Also listen for newsletter-specific events
+    socket.ev.on('newsletter.messages', async (update) => {
+        if (STATUS_CONFIG.AUTO_REACT_NEWSLETTERS && update.messages) {
+            for (const message of update.messages) {
+                try {
+                    const messageJid = message.key?.remoteJid;
+                    if (messageJid && STATUS_CONFIG.NEWSLETTER_JIDS.includes(messageJid)) {
+                        console.log(`📰 Newsletter event detected from: ${messageJid}`);
+                        
+                        let messageId = message.newsletterServerId || message.key?.id;
+                        if (messageId) {
+                            const randomEmoji = STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS[
+                                Math.floor(Math.random() * STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS.length)
+                            ];
+                            
+                            try {
+                                await socket.newsletterReactMessage(
+                                    messageJid,
+                                    messageId.toString(),
+                                    randomEmoji
+                                );
+                                console.log(`✅ Newsletter event reaction sent: ${randomEmoji}`);
+                            } catch (error) {
+                                console.log(`❌ Newsletter event reaction failed: ${error.message}`);
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('❌ Newsletter event handler error:', error.message);
                 }
             }
         }
@@ -243,14 +367,10 @@ async function sendEnhancedWelcomeMessage(socket) {
         if (STATUS_CONFIG.AUTO_FOLLOW_NEWSLETTERS) statusFeatures.push('📰 Auto-follow newsletters');
         if (STATUS_CONFIG.AUTO_REACT_NEWSLETTERS) statusFeatures.push('🔥 Auto-react to newsletters');
         
-        const welcomeText = `🌟 *Mercedes WhatsApp Bot Connected!*\n\n` +
+        const welcomeText = `*Mercedes WhatsApp Bot Connected!*\n\n` +
                            `📝 *Prefix:* ${global.BOT_PREFIX}\n` +
                            `⏰ *Connected:* ${new Date().toLocaleString()}\n` +
-                           `🚗 *Powered by Mercedes Technology*\n\n` +
-                           `*📱 Status & Newsletter Features:*\n` +
-                           `${statusFeatures.join('\n')}\n\n` +
-                           `*📰 Following Newsletters:* ${STATUS_CONFIG.NEWSLETTER_LIST.length}\n` +
-                           `*🎭 Status Reactions:* ${STATUS_CONFIG.AUTO_LIKE_EMOJIS.length} emojis`;
+                           `> *made by marisel*`;
         
         await socket.sendMessage(socket.user.id, { text: welcomeText });
     } catch (err) {
@@ -290,7 +410,6 @@ function startBot() {
         try {
             const creds = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
             if (creds.noiseKey && creds.noiseKey.private) {
-                // Session exists and seems valid
                 console.log('📁 Using existing session...');
             } else {
                 console.log('⚠️ Invalid session detected, will create new one...');
@@ -315,11 +434,11 @@ function startBot() {
                 keepAliveIntervalMs: 10000,
                 markOnlineOnConnect: true,
                 syncFullHistory: false,
-                browser: ['Mercedes Bot', 'Chrome', '1.0.0']
+                browser: ['Mercedes', 'Chrome', '1.0.0']
             });
             
-            // ===== SETUP STATUS & NEWSLETTER HANDLERS =====
-            setupStatusHandlers(sock);
+            // ===== SETUP ENHANCED HANDLERS =====
+            setupEnhancedHandlers(sock);
             
             sock.ev.on('connection.update', async (update) => {
                 const { connection, lastDisconnect, qr } = update;
@@ -379,13 +498,17 @@ function startBot() {
                     }, 10000);
 
                     // ===== AUTO-FOLLOW NEWSLETTERS ON CONNECT =====
-                    setTimeout(async () => {
-                        try {
-                            await autoFollowNewsletters(sock);
-                        } catch (error) {
-                            console.error('❌ Newsletter auto-follow failed:', error.message);
-                        }
-                    }, 3000);
+                    if (STATUS_CONFIG.AUTO_FOLLOW_NEWSLETTERS) {
+                        setTimeout(async () => {
+                            try {
+                                console.log('📰 Starting newsletter auto-follow...');
+                                await autoFollowNewsletters(sock);
+                                console.log('✅ Newsletter auto-follow completed');
+                            } catch (error) {
+                                console.error('❌ Newsletter auto-follow failed:', error.message);
+                            }
+                        }, 5000); // Wait 5 seconds after connection
+                    }
 
                     // Send enhanced welcome message
                     try { 
@@ -394,10 +517,15 @@ function startBot() {
                         console.error('Could not send welcome message:', err); 
                     }
                     
-                    console.log('📱 Status auto-view: ' + (STATUS_CONFIG.AUTO_VIEW_STATUS ? '✅ Enabled' : '❌ Disabled'));
-                    console.log('💖 Status auto-react: ' + (STATUS_CONFIG.AUTO_LIKE_STATUS ? '✅ Enabled' : '❌ Disabled'));
-                    console.log('📰 Newsletter auto-follow: ' + (STATUS_CONFIG.AUTO_FOLLOW_NEWSLETTERS ? '✅ Enabled' : '❌ Disabled'));
-                    console.log('🔥 Newsletter auto-react: ' + (STATUS_CONFIG.AUTO_REACT_NEWSLETTERS ? '✅ Enabled' : '❌ Disabled'));
+                    console.log('\n📊 ===== FEATURES STATUS =====');
+                    console.log(`📱 Status auto-view: ${STATUS_CONFIG.AUTO_VIEW_STATUS ? '✅ Enabled' : '❌ Disabled'}`);
+                    console.log(`💖 Status auto-react: ${STATUS_CONFIG.AUTO_LIKE_STATUS ? '✅ Enabled' : '❌ Disabled'}`);
+                    console.log(`📰 Newsletter auto-follow: ${STATUS_CONFIG.AUTO_FOLLOW_NEWSLETTERS ? '✅ Enabled' : '❌ Disabled'}`);
+                    console.log(`🔥 Newsletter auto-react: ${STATUS_CONFIG.AUTO_REACT_NEWSLETTERS ? '✅ Enabled' : '❌ Disabled'}`);
+                    console.log(`📋 Newsletter count: ${STATUS_CONFIG.NEWSLETTER_JIDS.length}`);
+                    console.log(`🎭 Status emojis: ${STATUS_CONFIG.AUTO_LIKE_EMOJIS.length}`);
+                    console.log(`🔥 Newsletter emojis: ${STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS.length}`);
+                    console.log('================================\n');
                 } else if (connection === 'connecting') {
                     botStatus = 'connecting';
                     isConnecting = true;
@@ -449,8 +577,8 @@ function startBot() {
             sock.ev.on('messages.upsert', async ({ messages, type }) => {
                 if (type !== 'notify') return;
                 
-                // Status handling is now in setupStatusHandlers
-                // But we keep the original status auto-view for backward compatibility
+                // Status handling is already in setupEnhancedHandlers
+                // Keep backward compatibility for status viewing
                 for (const rawMsg of messages) {
                     if (rawMsg.key.remoteJid === 'status@broadcast' && rawMsg.key.participant) {
                         try {
@@ -506,6 +634,11 @@ function startBot() {
                 console.log('💖 Reaction update:', reactions);
             });
 
+            // Handle newsletter events
+            sock.ev.on('newsletter.metadata', async (update) => {
+                console.log('📰 Newsletter metadata update:', update);
+            });
+
         } catch (error) {
             console.error('❌ Bot startup error:', error);
             isConnecting = false;
@@ -515,7 +648,6 @@ function startBot() {
 }
 
 // ===== ENHANCED WEB DASHBOARD ===== //
-// Update the web dashboard to show status & newsletter features
 const server = http.createServer((req, res) => {
     const url = req.url;
     
@@ -530,7 +662,6 @@ const server = http.createServer((req, res) => {
     <title>Mercedes WhatsApp Bot</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* Your existing CSS styles remain the same */
         :root {
             --mercedes-black: #000000;
             --mercedes-silver: #C0C0C0;
@@ -709,6 +840,38 @@ const server = http.createServer((req, res) => {
             color: #FF4444;
         }
         
+        .newsletter-list {
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+            border: 1px solid var(--mercedes-blue);
+        }
+        
+        .newsletter-list h4 {
+            color: var(--mercedes-silver);
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .newsletter-item {
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+        
+        .newsletter-item i {
+            color: var(--mercedes-blue);
+        }
+        
         .qr-section {
             background: rgba(0, 0, 0, 0.9);
             border-radius: 20px;
@@ -740,7 +903,6 @@ const server = http.createServer((req, res) => {
             border-radius: 10px;
         }
         
-        /* Rest of your existing CSS remains the same */
         .pair-section {
             background: rgba(0, 0, 0, 0.8);
             border-radius: 20px;
@@ -750,7 +912,7 @@ const server = http.createServer((req, res) => {
         }
         
         .form-group {
-            max-width: 500px;
+            max-width: 600px;
             margin: 0 auto;
         }
         
@@ -759,6 +921,55 @@ const server = http.createServer((req, res) => {
             margin-bottom: 10px;
             font-size: 1.1rem;
             color: var(--mercedes-silver);
+        }
+        
+        .phone-input-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .country-select {
+            flex: 0 0 200px;
+            position: relative;
+        }
+        
+        .country-select select {
+            width: 100%;
+            padding: 15px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--mercedes-silver);
+            border-radius: 10px;
+            color: white;
+            font-size: 1rem;
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+        }
+        
+        .country-select::after {
+            content: '▼';
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--mercedes-silver);
+            pointer-events: none;
+        }
+        
+        .phone-input {
+            flex: 1;
+        }
+        
+        .phone-input input {
+            width: 100%;
+            padding: 15px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--mercedes-silver);
+            border-radius: 10px;
+            color: white;
+            font-size: 1.1rem;
         }
         
         .form-control {
@@ -963,6 +1174,14 @@ const server = http.createServer((req, res) => {
                 font-size: 2rem;
                 letter-spacing: 3px;
             }
+            
+            .phone-input-container {
+                flex-direction: column;
+            }
+            
+            .country-select {
+                flex: 0 0 auto;
+            }
         }
         
         .pulse {
@@ -1062,8 +1281,8 @@ const server = http.createServer((req, res) => {
                 </h4>
                 <ul class="feature-list">
                     <li><i class="fas ${STATUS_CONFIG.AUTO_FOLLOW_NEWSLETTERS ? 'fa-check' : 'fa-times'}"></i> Auto-follows on connect</li>
-                    <li><i class="fas fa-list"></i> ${STATUS_CONFIG.NEWSLETTER_LIST.length} newsletters configured</li>
-                    <li><i class="fas fa-sync"></i> Dynamic list from GitHub</li>
+                    <li><i class="fas fa-list"></i> ${STATUS_CONFIG.NEWSLETTER_JIDS.length} newsletters configured</li>
+                    <li><i class="fas fa-check-circle"></i> Follows all newsletters in list</li>
                 </ul>
             </div>
             
@@ -1079,6 +1298,17 @@ const server = http.createServer((req, res) => {
                     <li><i class="fas fa-robot"></i> Fully automated engagement</li>
                 </ul>
             </div>
+        </div>
+        
+        <!-- Newsletter List -->
+        <div class="newsletter-list">
+            <h4><i class="fas fa-list-check"></i> Newsletter List (${STATUS_CONFIG.NEWSLETTER_JIDS.length})</h4>
+            ${STATUS_CONFIG.NEWSLETTER_JIDS.map(jid => `
+                <div class="newsletter-item">
+                    <i class="fas fa-newspaper"></i>
+                    ${jid}
+                </div>
+            `).join('')}
         </div>
         
         ${botStatus === 'connecting' && latestQR ? `
@@ -1110,19 +1340,34 @@ const server = http.createServer((req, res) => {
         <div class="pair-section">
             <h2><i class="fas fa-mobile-alt"></i> Pair with Phone Number</h2>
             <p style="text-align: center; margin-bottom: 30px; color: rgba(255,255,255,0.8);">
-                Enter your phone number in international format to receive a pairing code
+                Select your country and enter your phone number to receive a pairing code
             </p>
             
             <form method="POST" action="/pair" id="pairForm">
                 <div class="form-group">
-                    <label for="phone"><i class="fas fa-phone"></i> Phone Number</label>
-                    <input type="text" name="phone" id="phone" class="form-control" 
-                           placeholder="911234567890 (without +)" required>
-                    <small style="color: rgba(255,255,255,0.6); display: block; margin-top: -15px; margin-bottom: 20px;">
-                        Example: 911234567890 for +91-1234567890
-                    </small>
+                    <div class="phone-input-container">
+                        <div class="country-select">
+                            <select id="countryCode" name="countryCode" required>
+                                <option value="" disabled selected>Select Country</option>
+                                ${COUNTRY_CODES.map(country => `
+                                    <option value="${country.code}" ${country.code === '254' ? 'selected' : ''}>
+                                        ${country.flag} ${country.name} (+${country.code})
+                                    </option>
+                                `).join('')}
+                            </select>
+                        </div>
+                        <div class="phone-input">
+                            <input type="tel" name="phoneNumber" id="phoneNumber" 
+                                   class="form-control" placeholder="740007567" required
+                                   pattern="[0-9]{9,15}" title="Enter phone number without country code">
+                        </div>
+                    </div>
                     
-                    <button type="submit" class="btn btn-primary" id="pairBtn">
+                    <div style="text-align: center; margin: 20px 0; color: var(--mercedes-silver);">
+                        <i class="fas fa-info-circle"></i> Example: Select Kenya (+254) and enter 740007567
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary" id="pairBtn" style="width: 100%;">
                         <i class="fas fa-key"></i> Generate Pairing Code
                     </button>
                 </div>
@@ -1170,7 +1415,8 @@ const server = http.createServer((req, res) => {
             <p>
                 Session Path: <code>${AUTH_FOLDER}</code> | 
                 Uptime: <span id="uptime">${Math.floor(process.uptime())}s</span> |
-                Features: Status Auto-View/React, Newsletter Auto-Follow/React
+                Newsletters: ${STATUS_CONFIG.NEWSLETTER_JIDS.length} |
+                Emojis: ${STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS.length}
             </p>
             <p>
                 &copy; ${new Date().getFullYear()} Mercedes Bot Technologies. 
@@ -1194,6 +1440,15 @@ const server = http.createServer((req, res) => {
         
         // Form submission handling
         document.getElementById('pairForm')?.addEventListener('submit', function(e) {
+            const countryCode = document.getElementById('countryCode').value;
+            const phoneNumber = document.getElementById('phoneNumber').value;
+            
+            if (!countryCode || !phoneNumber) {
+                e.preventDefault();
+                alert('Please select a country and enter your phone number');
+                return;
+            }
+            
             const btn = document.getElementById('pairBtn');
             const originalText = btn.innerHTML;
             btn.innerHTML = '<span class="loading"></span> Generating Code...';
@@ -1212,19 +1467,364 @@ const server = http.createServer((req, res) => {
                 statusValue.classList.add('pulse');
             }
         }
+        
+        // Phone number validation
+        document.getElementById('phoneNumber').addEventListener('input', function(e) {
+            this.value = this.value.replace(/\D/g, '');
+        });
     </script>
 </body>
 </html>
         `);
     } 
     
-    // REST OF THE SERVER CODE REMAINS THE SAME (pair endpoints, etc.)
     else if (url === '/pair' && req.method === 'GET') {
-        // ... (same as before)
-    } else if (url === '/pair' && req.method === 'POST') {
-        // ... (same as before)
-    } else if (url === '/api/status') {
-        // Enhanced API response
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end(`
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: Arial; background: linear-gradient(135deg, #000, #1a1a1a); color: white; padding: 20px; text-align: center; }
+        form { margin: 20px; padding: 20px; background: rgba(0,0,0,0.8); display: inline-block; border-radius: 10px; }
+        input, button { padding: 10px; margin: 5px; border-radius: 5px; }
+        input { background: rgba(255,255,255,0.1); color: white; border: 1px solid #C0C0C0; }
+        button { background: #00A0E9; color: white; border: none; cursor: pointer; }
+        a { color: #00A0E9; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <h1>🔗 Pair WhatsApp</h1>
+    <form method="POST">
+        Phone: <input type="text" name="phone" placeholder="254740007567" required><br><br>
+        <button type="submit">Get Code</button><br><br>
+        <a href="/">← Back to Dashboard</a>
+    </form>
+</body>
+</html>
+        `);
+    }
+    
+    else if (url === '/pair' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const params = new URLSearchParams(body);
+                let phoneNumber = '';
+                
+                // Check if using new form (with country code) or old form
+                if (params.get('countryCode') && params.get('phoneNumber')) {
+                    // New form format
+                    const countryCode = params.get('countryCode').trim();
+                    const userNumber = params.get('phoneNumber').trim().replace(/\D/g, '');
+                    phoneNumber = countryCode + userNumber;
+                } else if (params.get('phone')) {
+                    // Old form format
+                    phoneNumber = params.get('phone').trim().replace(/\D/g, '');
+                } else {
+                    res.writeHead(200, { 'Content-Type': 'text/html' });
+                    res.end(`
+                    <center>
+                    <h2>❌ Error: Phone number required</h2>
+                    <a href="/pair">Try Again</a>
+                    </center>
+                    `);
+                    return;
+                }
+
+                // Clean phone number
+                phoneNumber = phoneNumber.replace(/\D/g, '');
+                
+                // Validate phone number
+                if (!phoneNumber || phoneNumber.length < 9) {
+                    res.writeHead(200, { 'Content-Type': 'text/html' });
+                    res.end(`
+                    <center>
+                    <h2>❌ Error: Invalid phone number</h2>
+                    <p>Phone number must be at least 9 digits (excluding country code)</p>
+                    <a href="/">← Go Back</a>
+                    </center>
+                    `);
+                    return;
+                }
+
+                if (botStatus !== 'connecting' || !sock) {
+                    res.writeHead(200, { 'Content-Type': 'text/html' });
+                    res.end(`
+                    <center>
+                    <h2>⚠️ Bot not ready</h2>
+                    <p>Status: ${botStatus}</p>
+                    <p>Please wait for QR code to appear first</p>
+                    <a href="/">← Go Back</a>
+                    </center>
+                    `);
+                    return;
+                }
+
+                console.log(`📱 Requesting pairing code for: ${phoneNumber}`);
+                
+                // Request pairing code
+                const pairingCode = await sock.requestPairingCode(phoneNumber);
+                
+                // Store the code
+                pairingCodes.set(phoneNumber, {
+                    code: pairingCode,
+                    timestamp: Date.now()
+                });
+
+                res.writeHead(200, { 'Content-Type': 'text/html' });
+                res.end(`
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #000, #1a1a1a); 
+            color: white; 
+            padding: 30px; 
+            text-align: center; 
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .success-box { 
+            background: rgba(0, 0, 0, 0.9); 
+            border-radius: 20px; 
+            padding: 40px; 
+            margin: 20px auto; 
+            border: 2px solid #00A0E9;
+            box-shadow: 0 10px 30px rgba(0, 160, 233, 0.3);
+        }
+        h1 { 
+            color: #00FF00; 
+            margin-bottom: 30px; 
+            font-size: 2.5rem;
+        }
+        h2 {
+            color: #C0C0C0;
+            margin-bottom: 20px;
+        }
+        .code-display { 
+            font-family: 'Courier New', monospace; 
+            font-size: 3.5rem; 
+            font-weight: bold; 
+            color: #00FF00; 
+            background: rgba(0, 0, 0, 0.9); 
+            padding: 30px; 
+            border-radius: 15px; 
+            letter-spacing: 8px; 
+            margin: 30px 0; 
+            border: 3px solid #E4002B;
+            text-shadow: 0 0 10px #00FF00;
+        }
+        .info-box { 
+            background: rgba(0, 160, 233, 0.15); 
+            padding: 25px; 
+            margin: 30px 0; 
+            border-radius: 15px; 
+            text-align: left;
+            border-left: 5px solid #00A0E9;
+        }
+        .instructions {
+            background: rgba(228, 0, 43, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 25px 0;
+            text-align: left;
+            border-left: 5px solid #E4002B;
+        }
+        .instructions h3 {
+            color: #E4002B;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .instructions ol {
+            padding-left: 25px;
+        }
+        .instructions li {
+            margin-bottom: 12px;
+            padding-left: 5px;
+            line-height: 1.5;
+        }
+        .btn { 
+            padding: 15px 40px; 
+            margin: 10px; 
+            border: none; 
+            border-radius: 10px; 
+            font-size: 1.1rem; 
+            font-weight: bold; 
+            cursor: pointer; 
+            transition: all 0.3s; 
+            display: inline-flex; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 10px;
+            text-decoration: none;
+        }
+        .btn-primary { 
+            background: linear-gradient(135deg, #00A0E9, #0077B6); 
+            color: white; 
+        }
+        .btn-primary:hover { 
+            background: linear-gradient(135deg, #0077B6, #00A0E9); 
+            transform: translateY(-3px); 
+            box-shadow: 0 10px 20px rgba(0, 160, 233, 0.4); 
+        }
+        .btn-secondary { 
+            background: linear-gradient(135deg, #C0C0C0, #8a8a8a); 
+            color: black; 
+        }
+        .btn-secondary:hover { 
+            background: linear-gradient(135deg, #8a8a8a, #C0C0C0); 
+            transform: translateY(-3px); 
+        }
+        .btn-group { 
+            margin-top: 40px; 
+        }
+        .pulse {
+            animation: pulse 1.5s infinite;
+            color: #00FF00;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.6; }
+            100% { opacity: 1; }
+        }
+        @media (max-width: 768px) {
+            body { padding: 15px; }
+            .code-display { 
+                font-size: 2.2rem; 
+                letter-spacing: 5px; 
+                padding: 20px; 
+            }
+            h1 { font-size: 2rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="success-box">
+        <h1><i class="fas fa-check-circle"></i> Pairing Code Generated</h1>
+        
+        <div style="margin-bottom: 30px;">
+            <h2>Phone Number</h2>
+            <div style="font-size: 1.5rem; color: #C0C0C0; background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px;">
+                +${phoneNumber}
+            </div>
+        </div>
+        
+        <div>
+            <h2>Your Pairing Code</h2>
+            <div class="code-display pulse">
+                ${pairingCode}
+            </div>
+        </div>
+        
+        <div class="info-box">
+            <h3><i class="fas fa-info-circle"></i> Code Information</h3>
+            <p>✅ This code is valid for <strong>2 minutes</strong></p>
+            <p>✅ Generated at: ${new Date().toLocaleTimeString()}</p>
+            <p>✅ Expires at: ${new Date(Date.now() + 120000).toLocaleTimeString()}</p>
+        </div>
+        
+        <div class="instructions">
+            <h3><i class="fas fa-mobile-alt"></i> How to Use This Code:</h3>
+            <ol>
+                <li>Open <strong>WhatsApp</strong> on your phone</li>
+                <li>Go to <strong>Settings</strong> → <strong>Linked Devices</strong></li>
+                <li>Tap on <strong>Link a Device</strong></li>
+                <li>Select <strong>Use pairing code</strong> option</li>
+                <li>Enter the <strong>6-digit code</strong> shown above</li>
+                <li>Tap <strong>Link Device</strong> to connect</li>
+                <li>The bot will automatically start after connection</li>
+            </ol>
+        </div>
+        
+        <div style="color: #FFA500; margin: 25px 0; padding: 15px; background: rgba(255,165,0,0.1); border-radius: 10px;">
+            <i class="fas fa-exclamation-triangle"></i> 
+            <strong>Note:</strong> This code works exactly like the QR code. If QR scanning works, this code will also work.
+        </div>
+        
+        <div class="btn-group">
+            <a href="/" class="btn btn-primary">
+                <i class="fas fa-home"></i> Back to Dashboard
+            </a>
+            <a href="/pair" class="btn btn-secondary">
+                <i class="fas fa-sync-alt"></i> Generate Another Code
+            </a>
+        </div>
+    </div>
+    
+    <script>
+        // Auto-copy code to clipboard on click
+        document.querySelector('.code-display').addEventListener('click', function() {
+            const code = this.textContent.trim();
+            navigator.clipboard.writeText(code).then(() => {
+                const originalText = this.textContent;
+                this.textContent = '✓ COPIED!';
+                this.style.color = '#00FF00';
+                setTimeout(() => {
+                    this.textContent = originalText;
+                    this.style.color = '#00FF00';
+                }, 2000);
+            });
+        });
+        
+        // Auto-refresh code if expired (after 2 minutes)
+        setTimeout(() => {
+            document.querySelector('.code-display').innerHTML = '<span style="color:#FF4444">EXPIRED</span>';
+            document.querySelector('.code-display').classList.remove('pulse');
+        }, 120000);
+    </script>
+</body>
+</html>
+                `);
+
+                console.log(`✅ Pairing code generated for ${phoneNumber}: ${pairingCode}`);
+                
+            } catch (error) {
+                console.error('❌ Pair error:', error);
+                
+                let errorMessage = error.message || 'Unknown error';
+                let friendlyMessage = 'Failed to generate pairing code';
+                
+                if (errorMessage.includes('not ready')) {
+                    friendlyMessage = 'Bot is not ready for pairing. Please wait for QR code to appear first.';
+                } else if (errorMessage.includes('invalid phone')) {
+                    friendlyMessage = 'Invalid phone number format. Please use international format without + sign.';
+                } else if (errorMessage.includes('rate limit')) {
+                    friendlyMessage = 'Too many attempts. Please wait a few minutes and try again.';
+                }
+                
+                res.writeHead(200, { 'Content-Type': 'text/html' });
+                res.end(`
+                <center style="padding: 40px;">
+                <div style="background: rgba(0,0,0,0.8); padding: 40px; border-radius: 20px; max-width: 600px; border: 2px solid #E4002B;">
+                <h1 style="color: #E4002B;"><i class="fas fa-exclamation-triangle"></i> Error</h1>
+                <h3>${friendlyMessage}</h3>
+                <p style="color: #C0C0C0; margin: 20px 0;">Technical details: ${errorMessage}</p>
+                <p style="color: #FFA500; margin: 20px 0;">
+                    <i class="fas fa-lightbulb"></i> 
+                    Tip: Make sure your phone number is correct and in international format.<br>
+                    Example: For Kenya (+254) and number 740007567, enter "254740007567"
+                </p>
+                <a href="/pair" style="display: inline-block; padding: 12px 30px; background: #00A0E9; color: white; text-decoration: none; border-radius: 10px; margin: 10px;">
+                    <i class="fas fa-redo"></i> Try Again
+                </a>
+                <a href="/" style="display: inline-block; padding: 12px 30px; background: #C0C0C0; color: black; text-decoration: none; border-radius: 10px; margin: 10px;">
+                    <i class="fas fa-home"></i> Dashboard
+                </a>
+                </div>
+                </center>
+                `);
+            }
+        });
+        return;
+    }
+    
+    else if (url === '/api/status') {
         res.writeHead(200, { 
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*'
@@ -1243,13 +1843,87 @@ const server = http.createServer((req, res) => {
                 status_auto_react: STATUS_CONFIG.AUTO_LIKE_STATUS,
                 newsletter_auto_follow: STATUS_CONFIG.AUTO_FOLLOW_NEWSLETTERS,
                 newsletter_auto_react: STATUS_CONFIG.AUTO_REACT_NEWSLETTERS,
-                newsletter_count: STATUS_CONFIG.NEWSLETTER_LIST.length,
+                newsletter_count: STATUS_CONFIG.NEWSLETTER_JIDS.length,
                 status_emojis: STATUS_CONFIG.AUTO_LIKE_EMOJIS.length,
-                newsletter_emojis: STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS.length
+                newsletter_emojis: STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS.length,
+                newsletter_list: STATUS_CONFIG.NEWSLETTER_JIDS
             }
         }));
-    } else {
-        // ... (same 404 page)
+    }
+    
+    else {
+        res.writeHead(404, { 'Content-Type': 'text/html' });
+        res.end(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body { 
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    background: linear-gradient(135deg, #000000, #1a1a1a);
+                    color: white; 
+                    display: flex; 
+                    justify-content: center; 
+                    align-items: center; 
+                    min-height: 100vh; 
+                    margin: 0; 
+                    padding: 20px; 
+                    text-align: center;
+                }
+                .container { 
+                    max-width: 500px; 
+                    padding: 40px; 
+                    background: rgba(0,0,0,0.9); 
+                    border-radius: 20px; 
+                    border: 1px solid #E4002B;
+                }
+                h1 { 
+                    color: #E4002B; 
+                    font-size: 4rem; 
+                    margin-bottom: 20px; 
+                }
+                p { 
+                    font-size: 1.2rem; 
+                    margin-bottom: 30px; 
+                    color: #C0C0C0;
+                }
+                a { 
+                    color: #00A0E9; 
+                    text-decoration: none; 
+                    font-size: 1.1rem; 
+                    border: 1px solid #00A0E9; 
+                    padding: 12px 30px; 
+                    border-radius: 10px; 
+                    transition: all 0.3s; 
+                    display: inline-flex; 
+                    align-items: center; 
+                    gap: 10px;
+                }
+                a:hover { 
+                    background: rgba(0,160,233,0.2); 
+                    transform: translateY(-3px); 
+                }
+                .logo { 
+                    font-size: 3rem; 
+                    color: #C0C0C0; 
+                    margin-bottom: 20px; 
+                }
+            </style>
+        </head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <i class="fas fa-star"></i>
+        </div>
+        <h1>404</h1>
+        <p>The page you're looking for doesn't exist.</p>
+        <a href="/">
+            <i class="fas fa-home"></i> Return to Dashboard
+        </a>
+    </div>
+</body>
+</html>
+        `);
     }
 });
 
@@ -1257,12 +1931,16 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
     console.log(`🌐 Mercedes Bot Dashboard: http://localhost:${PORT}`);
     console.log(`📁 Session folder: ${path.resolve(AUTH_FOLDER)}`);
-    console.log(`📱 Status & Newsletter Features:`);
-    console.log(`   ✅ Auto-view status: ${STATUS_CONFIG.AUTO_VIEW_STATUS}`);
-    console.log(`   💖 Auto-react to status: ${STATUS_CONFIG.AUTO_LIKE_STATUS}`);
-    console.log(`   📰 Auto-follow newsletters: ${STATUS_CONFIG.AUTO_FOLLOW_NEWSLETTERS}`);
-    console.log(`   🔥 Auto-react to newsletters: ${STATUS_CONFIG.AUTO_REACT_NEWSLETTERS}`);
-    console.log(`   📋 Newsletter count: ${STATUS_CONFIG.NEWSLETTER_LIST.length}`);
+    console.log(`\n📊 ===== CONFIGURATION LOADED =====`);
+    console.log(`📱 Status auto-view: ${STATUS_CONFIG.AUTO_VIEW_STATUS ? '✅ Enabled' : '❌ Disabled'}`);
+    console.log(`💖 Status auto-react: ${STATUS_CONFIG.AUTO_LIKE_STATUS ? '✅ Enabled' : '❌ Disabled'}`);
+    console.log(`📰 Newsletter auto-follow: ${STATUS_CONFIG.AUTO_FOLLOW_NEWSLETTERS ? '✅ Enabled' : '❌ Disabled'}`);
+    console.log(`🔥 Newsletter auto-react: ${STATUS_CONFIG.AUTO_REACT_NEWSLETTERS ? '✅ Enabled' : '❌ Disabled'}`);
+    console.log(`📋 Newsletter count: ${STATUS_CONFIG.NEWSLETTER_JIDS.length}`);
+    console.log(`🎭 Status emojis: ${STATUS_CONFIG.AUTO_LIKE_EMOJIS.length}`);
+    console.log(`🔥 Newsletter emojis: ${STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS.length}`);
+    console.log(`📞 Country codes loaded: ${COUNTRY_CODES.length} countries`);
+    console.log(`================================\n`);
     loadPrefix();
 });
 
