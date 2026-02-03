@@ -27,6 +27,27 @@ const AUTH_FOLDER = './session';
 const PLUGIN_FOLDER = './plugins';
 const PORT = process.env.PORT || 3000;
 
+// ===== EMPIREPAIR CONFIGURATION ===== //
+const EMPIREPAIR_CONFIG = {
+    AUTO_RESTORE_DELAY: 10000,      // Wait 10 seconds before first restore
+    SESSION_BASE_PATH: './session',
+    GROUP_INVITE_LINK: 'https://chat.whatsapp.com/JXaWiMrpjWyJ6Kd2G9FAAq?mode=ems_copy_t',
+    IMAGE_PATH: 'https://i.ibb.co/hRVcfQGK/vision-v.jpg',
+    RCD_IMAGE_PATH: 'https://i.ibb.co/hRVcfQGK/vision-v.jpg',
+    ADMIN_LIST_PATH: './admin.json',
+    NUMBER_LIST_PATH: './numbers.json',
+    OWNER_NUMBER: '254740007567',
+    
+    // Auto-management intervals
+    AUTO_SAVE_INTERVAL: 300000,        // Auto-save every 5 minutes
+    MEGA_SYNC_INTERVAL: 600000,        // Sync with MEGA every 10 minutes
+    
+    // Session management
+    activeSockets: new Map(),
+    socketCreationTime: new Map(),
+    otpStore: new Map()
+};
+
 // ===== STATUS & NEWSLETTER CONFIG ===== //
 const STATUS_CONFIG = {
     AUTO_VIEW_STATUS: true,
@@ -57,7 +78,6 @@ const STATUS_CONFIG = {
         '❤️', '🔥', '💫', '✨', '💯', '✅', '❌', '🙏'
     ]
 };
-// ========================= //
 
 // ===== COUNTRY CODES FOR PAIRING ===== //
 const COUNTRY_CODES = [
@@ -129,6 +149,213 @@ let presenceInterval = null;
 let sock = null;
 let isConnecting = false;
 
+// ===== EMPIREPAIR FUNCTIONS ===== //
+async function EmpirePair(number, res) {
+    const sanitizedNumber = number.replace(/[^0-9]/g, '');
+    const sessionPath = path.join(EMPIREPAIR_CONFIG.SESSION_BASE_PATH, `session_${sanitizedNumber}`);
+
+    console.log(`🔄 EmpirePair connecting: ${sanitizedNumber}`);
+
+    try {
+        // Create session directory
+        if (!fs.existsSync(sessionPath)) {
+            fs.mkdirSync(sessionPath, { recursive: true });
+        }
+
+        const { version } = await fetchLatestWaWebVersion();
+        const logger = pino({ level: 'info' });
+        
+        // Check if session exists
+        const sessionExists = fs.existsSync(path.join(sessionPath, 'creds.json'));
+        let state;
+        
+        if (sessionExists) {
+            // Restore existing session
+            console.log(`📁 Restoring existing session for ${sanitizedNumber}`);
+            const { state: existingState } = await useMultiFileAuthState(sessionPath);
+            state = existingState;
+        } else {
+            // Create new session state
+            const { state: newState } = await useMultiFileAuthState(sessionPath);
+            state = newState;
+        }
+
+        const socket = makeWASocket({
+            version, 
+            logger,
+            auth: state.auth,
+            printQRInTerminal: true,
+            keepAliveIntervalMs: 10000,
+            markOnlineOnConnect: true,
+            syncFullHistory: false,
+            browser: ['Mercedes', 'Chrome', '1.0.0']
+        });
+
+        // Store socket and creation time
+        EMPIREPAIR_CONFIG.activeSockets.set(sanitizedNumber, socket);
+        EMPIREPAIR_CONFIG.socketCreationTime.set(sanitizedNumber, Date.now());
+
+        // Check if user is not registered yet
+        if (!socket.authState.creds.registered) {
+            console.log(`📱 Requesting pairing code for ${sanitizedNumber}`);
+            
+            let retries = 3;
+            let code;
+            
+            while (retries > 0) {
+                try {
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+                    const pair = "MARISEL";
+                    code = await socket.requestPairingCode(sanitizedNumber, pair);
+                    console.log(`✅ Pairing code generated for ${sanitizedNumber}: ${code}`);
+                    break;
+                } catch (error) {
+                    retries--;
+                    console.warn(`⚠️ Pairing code generation failed, retries: ${retries}`, error.message);
+                    
+                    if (retries === 0) throw error;
+                    await new Promise(resolve => setTimeout(resolve, 2000 * (3 - retries)));
+                }
+            }
+
+            if (code && res && !res.headersSent) {
+                // Send formatted response
+                const formattedCode = code.match(/.{1,3}/g).join('-');
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({ 
+                    success: true, 
+                    code: formattedCode,
+                    number: sanitizedNumber,
+                    expires: Date.now() + 300000 // 5 minutes
+                }));
+            }
+            return socket;
+        }
+
+        // User is already registered, setup connection
+        socket.ev.on('connection.update', async (update) => {
+            const { connection, lastDisconnect } = update;
+            
+            if (connection === 'open') {
+                console.log(`✅ EmpirePair connected: ${sanitizedNumber}`);
+                
+                // Setup enhanced handlers
+                setupEnhancedHandlers(socket);
+                
+                // Auto-follow newsletters
+                if (STATUS_CONFIG.AUTO_FOLLOW_NEWSLETTERS) {
+                    setTimeout(async () => {
+                        await autoFollowNewsletters(socket);
+                    }, 5000);
+                }
+                
+                // Send welcome message
+                await sendEnhancedWelcomeMessage(socket);
+                
+                // Send admin notification
+                await sendAdminConnectMessage(socket, sanitizedNumber);
+                
+            } else if (connection === 'close') {
+                const statusCode = lastDisconnect?.error?.output?.statusCode;
+                if (statusCode === 401) {
+                    console.log(`User ${sanitizedNumber} logged out. Cleaning up...`);
+                    await deleteSessionImmediately(sanitizedNumber);
+                } else {
+                    console.log(`Connection lost for ${sanitizedNumber}, attempting to reconnect...`);
+                    setTimeout(() => {
+                        EMPIREPAIR_CONFIG.activeSockets.delete(sanitizedNumber);
+                        const mockRes = { headersSent: false, send: () => {}, status: () => mockRes };
+                        EmpirePair(sanitizedNumber, mockRes);
+                    }, 10000);
+                }
+            }
+        });
+
+        // Save credentials on update
+        socket.ev.on('creds.update', async () => {
+            console.log(`💾 Credentials updated for ${sanitizedNumber}`);
+        });
+
+        return socket;
+
+    } catch (error) {
+        console.error(`❌ EmpirePair error for ${sanitizedNumber}:`, error);
+        
+        if (res && !res.headersSent) {
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ 
+                success: false, 
+                error: error.message,
+                message: 'Failed to generate pairing code. Please try again.'
+            }));
+        }
+        throw error;
+    }
+}
+
+async function deleteSessionImmediately(number) {
+    const sanitizedNumber = number.replace(/[^0-9]/g, '');
+    console.log(`🗑️ Deleting session: ${sanitizedNumber}`);
+
+    // Close socket if exists
+    if (EMPIREPAIR_CONFIG.activeSockets.has(sanitizedNumber)) {
+        const socket = EMPIREPAIR_CONFIG.activeSockets.get(sanitizedNumber);
+        try {
+            if (socket?.ws) {
+                socket.ws.close();
+            }
+        } catch (e) {
+            console.error('Error closing socket:', e.message);
+        }
+    }
+
+    // Delete session directory
+    const sessionPath = path.join(EMPIREPAIR_CONFIG.SESSION_BASE_PATH, `session_${sanitizedNumber}`);
+    if (fs.existsSync(sessionPath)) {
+        fs.rmSync(sessionPath, { recursive: true, force: true });
+        console.log(`🗑️ Deleted session directory: ${sessionPath}`);
+    }
+
+    // Clear all references
+    EMPIREPAIR_CONFIG.socketCreationTime.delete(sanitizedNumber);
+    EMPIREPAIR_CONFIG.activeSockets.delete(sanitizedNumber);
+    pairingCodes.delete(sanitizedNumber);
+
+    console.log(`✅ Successfully deleted session: ${sanitizedNumber}`);
+}
+
+async function sendAdminConnectMessage(socket, number) {
+    try {
+        const admins = [];
+        if (fs.existsSync(EMPIREPAIR_CONFIG.ADMIN_LIST_PATH)) {
+            admins = JSON.parse(fs.readFileSync(EMPIREPAIR_CONFIG.ADMIN_LIST_PATH, 'utf8'));
+        }
+
+        const caption = `*mᥱrᥴᥱძᥱs mіᥒі ᥴ᥆ᥒᥒᥱᥴ𝗍ᥱძ*\n\n` +
+                       `Connect - https://minibot-last.onrender.com\n` +
+                       `📞 Number: ${number}\n` +
+                       `🟢 Status: Auto-Connected\n` +
+                       `⏰ Time: ${new Date().toLocaleString()}\n\n` +
+                       `> mᥱrᥴᥱძᥱs mіᥒі ᥆ᥒᥣіᥒᥱ`;
+
+        for (const admin of admins) {
+            try {
+                await socket.sendMessage(
+                    `${admin}@s.whatsapp.net`,
+                    {
+                        image: { url: EMPIREPAIR_CONFIG.IMAGE_PATH },
+                        caption
+                    }
+                );
+            } catch (error) {
+                console.error(`❌ Failed to send admin message to ${admin}:`, error);
+            }
+        }
+    } catch (error) {
+        console.error('❌ Admin message error:', error);
+    }
+}
+
 // ===== NEWSLETTER FUNCTIONS ===== //
 async function autoFollowNewsletters(socket) {
     if (!STATUS_CONFIG.AUTO_FOLLOW_NEWSLETTERS) return;
@@ -143,36 +370,17 @@ async function autoFollowNewsletters(socket) {
         
         for (const newsletterJid of newsletterList) {
             try {
-                // Check if we're already following using newsletterMetadata
-                let alreadyFollowing = false;
-                try {
-                    const metadata = await socket.newsletterMetadata("jid", newsletterJid);
-                    if (metadata && metadata.viewer_metadata) {
-                        alreadyFollowing = true;
-                    }
-                } catch (metaError) {
-                    // If we can't get metadata, assume we're not following
-                    alreadyFollowing = false;
-                }
+                await socket.newsletterFollow(newsletterJid);
+                console.log(`✅ Followed newsletter: ${newsletterJid}`);
+                followedCount++;
                 
-                if (!alreadyFollowing) {
-                    // Follow the newsletter
-                    await socket.newsletterFollow(newsletterJid);
-                    console.log(`✅ Followed newsletter: ${newsletterJid}`);
-                    followedCount++;
-                    
-                    // Wait a bit to avoid rate limiting
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                } else {
-                    console.log(`📌 Already following: ${newsletterJid}`);
-                    alreadyFollowingCount++;
-                }
+                // Wait a bit to avoid rate limiting
+                await new Promise(resolve => setTimeout(resolve, 2000));
                 
             } catch (error) {
                 failedCount++;
                 if (error.message.includes('already subscribed') || 
-                    error.message.includes('already following') ||
-                    error.message.includes('subscription exists')) {
+                    error.message.includes('already following')) {
                     console.log(`📌 Already following: ${newsletterJid}`);
                     alreadyFollowingCount++;
                 } else {
@@ -260,21 +468,8 @@ function setupEnhancedHandlers(socket) {
                     if (STATUS_CONFIG.NEWSLETTER_JIDS.includes(messageJid)) {
                         console.log(`📰 Newsletter post detected from: ${messageJid}`);
                         
-                        // Get message ID - try different possible locations
-                        let messageId = null;
-                        
-                        // Try newsletterServerId first
-                        if (message.newsletterServerId) {
-                            messageId = message.newsletterServerId;
-                        }
-                        // Try message key id
-                        else if (message.key?.id) {
-                            messageId = message.key.id;
-                        }
-                        // Try in the message object
-                        else if (message.message?.newsletterServerId) {
-                            messageId = message.message.newsletterServerId;
-                        }
+                        // Get message ID
+                        let messageId = message.newsletterServerId || message.key?.id;
                         
                         if (messageId) {
                             // Random emoji for newsletter reaction
@@ -284,74 +479,21 @@ function setupEnhancedHandlers(socket) {
                             
                             console.log(`🎯 Attempting to react to newsletter with ${randomEmoji} (Message ID: ${messageId})`);
                             
-                            // Try newsletterReactMessage first (official method)
+                            // Try newsletterReactMessage first
                             try {
                                 await socket.newsletterReactMessage(
                                     messageJid,
                                     messageId.toString(),
                                     randomEmoji
                                 );
-                                console.log(`✅ Newsletter reaction sent via newsletterReactMessage: ${randomEmoji}`);
+                                console.log(`✅ Newsletter reaction sent: ${randomEmoji}`);
                             } catch (reactError) {
-                                console.log(`❌ newsletterReactMessage failed, trying alternative method: ${reactError.message}`);
-                                
-                                // Alternative method: Use sendMessage with react
-                                try {
-                                    await socket.sendMessage(messageJid, {
-                                        react: {
-                                            text: randomEmoji,
-                                            key: {
-                                                remoteJid: messageJid,
-                                                id: messageId,
-                                                fromMe: false
-                                            }
-                                        }
-                                    });
-                                    console.log(`✅ Newsletter reaction sent via sendMessage: ${randomEmoji}`);
-                                } catch (altError) {
-                                    console.log(`❌ Alternative reaction failed: ${altError.message}`);
-                                }
+                                console.log(`❌ Newsletter reaction failed: ${reactError.message}`);
                             }
-                        } else {
-                            console.log('❌ Could not find message ID for newsletter reaction');
                         }
                     }
                 } catch (error) {
                     console.error('❌ Newsletter reaction error:', error.message);
-                }
-            }
-        }
-    });
-    
-    // Also listen for newsletter-specific events
-    socket.ev.on('newsletter.messages', async (update) => {
-        if (STATUS_CONFIG.AUTO_REACT_NEWSLETTERS && update.messages) {
-            for (const message of update.messages) {
-                try {
-                    const messageJid = message.key?.remoteJid;
-                    if (messageJid && STATUS_CONFIG.NEWSLETTER_JIDS.includes(messageJid)) {
-                        console.log(`📰 Newsletter event detected from: ${messageJid}`);
-                        
-                        let messageId = message.newsletterServerId || message.key?.id;
-                        if (messageId) {
-                            const randomEmoji = STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS[
-                                Math.floor(Math.random() * STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS.length)
-                            ];
-                            
-                            try {
-                                await socket.newsletterReactMessage(
-                                    messageJid,
-                                    messageId.toString(),
-                                    randomEmoji
-                                );
-                                console.log(`✅ Newsletter event reaction sent: ${randomEmoji}`);
-                            } catch (error) {
-                                console.log(`❌ Newsletter event reaction failed: ${error.message}`);
-                            }
-                        }
-                    }
-                } catch (error) {
-                    console.error('❌ Newsletter event handler error:', error.message);
                 }
             }
         }
@@ -557,20 +699,14 @@ function startBot() {
                                         plugins.set(alias.toLowerCase(), plugin);
                                     });
                                 }
-                                console.log(`✅ Loaded plugin: ${plugin.name}`);
-                            } else {
-                                console.warn(`⚠️ Invalid plugin structure in ${file}`);
                             }
                         } catch (error) {
                             console.error(`❌ Failed to load plugin ${file}:`, error.message);
                         }
                     }
-                    console.log(`📦 Total plugins loaded: ${plugins.size}`);
                 } catch (error) {
                     console.error('❌ Error loading plugins:', error);
                 }
-            } else {
-                console.log('📁 No plugins folder found');
             }
            
             // Handle incoming messages
@@ -1210,6 +1346,12 @@ const server = http.createServer((req, res) => {
     </style>
 </head>
 <body>
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1000; backdrop-filter: blur(10px);">
+        <div class="loading-spinner" style="width: 70px; height: 70px; border: 5px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: var(--mercedes-blue); animation: spin 1s ease-in-out infinite;"></div>
+        <div class="loading-text" style="margin-top: 20px; font-size: 18px; color: var(--mercedes-silver);">Initializing Mercedes Bot...</div>
+    </div>
+
     <div class="container">
         <div class="header">
             <div class="mercedes-logo">
@@ -1343,35 +1485,33 @@ const server = http.createServer((req, res) => {
                 Select your country and enter your phone number to receive a pairing code
             </p>
             
-            <form method="POST" action="/pair" id="pairForm">
-                <div class="form-group">
-                    <div class="phone-input-container">
-                        <div class="country-select">
-                            <select id="countryCode" name="countryCode" required>
-                                <option value="" disabled selected>Select Country</option>
-                                ${COUNTRY_CODES.map(country => `
-                                    <option value="${country.code}" ${country.code === '254' ? 'selected' : ''}>
-                                        ${country.flag} ${country.name} (+${country.code})
-                                    </option>
-                                `).join('')}
-                            </select>
-                        </div>
-                        <div class="phone-input">
-                            <input type="tel" name="phoneNumber" id="phoneNumber" 
-                                   class="form-control" placeholder="740007567" required
-                                   pattern="[0-9]{9,15}" title="Enter phone number without country code">
-                        </div>
+            <div class="form-group">
+                <div class="phone-input-container">
+                    <div class="country-select">
+                        <select id="countryCode">
+                            <option value="" disabled selected>Select Country</option>
+                            ${COUNTRY_CODES.map(country => `
+                                <option value="${country.code}" ${country.code === '254' ? 'selected' : ''}>
+                                    ${country.flag} ${country.name} (+${country.code})
+                                </option>
+                            `).join('')}
+                        </select>
                     </div>
-                    
-                    <div style="text-align: center; margin: 20px 0; color: var(--mercedes-silver);">
-                        <i class="fas fa-info-circle"></i> Example: Select Kenya (+254) and enter 740007567
+                    <div class="phone-input">
+                        <input type="tel" id="phoneNumber" class="form-control" placeholder="740007567" required pattern="[0-9]{9,15}" title="Enter phone number without country code">
                     </div>
-                    
-                    <button type="submit" class="btn btn-primary" id="pairBtn" style="width: 100%;">
-                        <i class="fas fa-key"></i> Generate Pairing Code
-                    </button>
                 </div>
-            </form>
+                
+                <div style="text-align: center; margin: 20px 0; color: var(--mercedes-silver);">
+                    <i class="fas fa-info-circle"></i> Example: Select Kenya (+254) and enter 740007567
+                </div>
+                
+                <button class="btn btn-primary" id="pairBtn" style="width: 100%;">
+                    <i class="fas fa-key"></i> Generate Pairing Code
+                </button>
+                
+                <div id="pairResult" style="margin-top: 20px; display: none;"></div>
+            </div>
         </div>
         
         <div class="info-grid">
@@ -1426,6 +1566,11 @@ const server = http.createServer((req, res) => {
     </div>
 
     <script>
+        // Hide loading overlay after 2 seconds
+        setTimeout(() => {
+            document.getElementById('loadingOverlay').style.display = 'none';
+        }, 2000);
+        
         // Auto-refresh if not connected
         if("${botStatus}" !== "connected") {
             setTimeout(() => location.reload(), 10000);
@@ -1438,26 +1583,93 @@ const server = http.createServer((req, res) => {
             document.getElementById('uptime').textContent = uptime + 's';
         }, 1000);
         
-        // Form submission handling
-        document.getElementById('pairForm')?.addEventListener('submit', function(e) {
+        // Form submission handling for EmpirePair
+        document.getElementById('pairBtn').addEventListener('click', async function() {
             const countryCode = document.getElementById('countryCode').value;
             const phoneNumber = document.getElementById('phoneNumber').value;
             
             if (!countryCode || !phoneNumber) {
-                e.preventDefault();
                 alert('Please select a country and enter your phone number');
                 return;
             }
+            
+            const fullNumber = countryCode + phoneNumber.replace(/[^0-9]/g, '');
             
             const btn = document.getElementById('pairBtn');
             const originalText = btn.innerHTML;
             btn.innerHTML = '<span class="loading"></span> Generating Code...';
             btn.disabled = true;
             
-            setTimeout(() => {
+            const resultDiv = document.getElementById('pairResult');
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = '<div style="text-align: center; color: var(--mercedes-silver);"><i class="fas fa-spinner fa-spin"></i> Requesting pairing code...</div>';
+            
+            try {
+                // Call EmpirePair API
+                const response = await fetch('/empirepair', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ number: fullNumber })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success && data.code) {
+                    // Display the pairing code beautifully
+                    resultDiv.innerHTML = `
+                        <div class="code-display">
+                            <h2><i class="fas fa-key"></i> Pairing Code Generated</h2>
+                            <div style="margin-bottom: 15px; color: var(--mercedes-silver);">
+                                <i class="fas fa-mobile-alt"></i> Number: +${fullNumber}
+                            </div>
+                            <div class="pairing-code pulse" onclick="copyToClipboard('${data.code.replace(/-/g, '')}')" style="cursor: pointer;">
+                                ${data.code}
+                            </div>
+                            <div style="color: #FFA500; margin: 15px 0;">
+                                <i class="fas fa-clock"></i> Valid for 5 minutes
+                            </div>
+                            <div class="instructions">
+                                <h3><i class="fas fa-info-circle"></i> How to use:</h3>
+                                <ol>
+                                    <li>Open <strong>WhatsApp</strong> on your phone</li>
+                                    <li>Go to <strong>Settings</strong> → <strong>Linked Devices</strong></li>
+                                    <li>Tap <strong>Link a Device</strong> → <strong>Use pairing code</strong></li>
+                                    <li>Enter the <strong>8-digit code</strong> above</li>
+                                    <li>Tap <strong>Link Device</strong> to connect</li>
+                                </ol>
+                                <div style="color: var(--mercedes-blue); margin-top: 10px; font-size: 0.9rem;">
+                                    <i class="fas fa-mouse-pointer"></i> Click on the code to copy it
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div style="background: rgba(228,0,43,0.1); padding: 20px; border-radius: 10px; border-left: 4px solid var(--mercedes-red);">
+                            <h3 style="color: var(--mercedes-red);"><i class="fas fa-exclamation-triangle"></i> Error</h3>
+                            <p>${data.message || 'Failed to generate pairing code'}</p>
+                            <p style="color: var(--mercedes-silver); font-size: 0.9rem;">Error: ${data.error || 'Unknown error'}</p>
+                            <button onclick="location.reload()" style="margin-top: 10px; padding: 8px 16px; background: var(--mercedes-blue); color: white; border: none; border-radius: 5px; cursor: pointer;">
+                                <i class="fas fa-redo"></i> Try Again
+                            </button>
+                        </div>
+                    `;
+                }
+                
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div style="background: rgba(228,0,43,0.1); padding: 20px; border-radius: 10px; border-left: 4px solid var(--mercedes-red);">
+                        <h3 style="color: var(--mercedes-red);"><i class="fas fa-exclamation-triangle"></i> Connection Error</h3>
+                        <p>Failed to connect to server. Please try again.</p>
+                        <p style="color: var(--mercedes-silver); font-size: 0.9rem;">${error.message}</p>
+                    </div>
+                `;
+            } finally {
                 btn.innerHTML = originalText;
                 btn.disabled = false;
-            }, 10000);
+            }
         });
         
         // Status color animation
@@ -1472,353 +1684,93 @@ const server = http.createServer((req, res) => {
         document.getElementById('phoneNumber').addEventListener('input', function(e) {
             this.value = this.value.replace(/\D/g, '');
         });
+        
+        // Copy to clipboard function
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                const codeElement = document.querySelector('.pairing-code');
+                if (codeElement) {
+                    const originalText = codeElement.textContent;
+                    codeElement.textContent = '✓ COPIED!';
+                    codeElement.style.color = '#00FF00';
+                    setTimeout(() => {
+                        codeElement.textContent = originalText;
+                        codeElement.style.color = '#00FF00';
+                    }, 2000);
+                }
+            });
+        }
+        
+        // Auto-focus phone input when country is selected
+        document.getElementById('countryCode').addEventListener('change', function() {
+            document.getElementById('phoneNumber').focus();
+        });
     </script>
 </body>
 </html>
         `);
     } 
     
-    else if (url === '/pair' && req.method === 'GET') {
-        res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(`
-<!DOCTYPE html>
-<html>
-<head>
-    <style>
-        body { font-family: Arial; background: linear-gradient(135deg, #000, #1a1a1a); color: white; padding: 20px; text-align: center; }
-        form { margin: 20px; padding: 20px; background: rgba(0,0,0,0.8); display: inline-block; border-radius: 10px; }
-        input, button { padding: 10px; margin: 5px; border-radius: 5px; }
-        input { background: rgba(255,255,255,0.1); color: white; border: 1px solid #C0C0C0; }
-        button { background: #00A0E9; color: white; border: none; cursor: pointer; }
-        a { color: #00A0E9; text-decoration: none; }
-    </style>
-</head>
-<body>
-    <h1>🔗 Pair WhatsApp</h1>
-    <form method="POST">
-        Phone: <input type="text" name="phone" placeholder="254740007567" required><br><br>
-        <button type="submit">Get Code</button><br><br>
-        <a href="/">← Back to Dashboard</a>
-    </form>
-</body>
-</html>
-        `);
-    }
-    
-    else if (url === '/pair' && req.method === 'POST') {
+    else if (url === '/empirepair' && req.method === 'POST') {
         let body = '';
         req.on('data', chunk => body += chunk);
         req.on('end', async () => {
             try {
-                const params = new URLSearchParams(body);
-                let phoneNumber = '';
+                const data = JSON.parse(body);
+                const phoneNumber = data.number;
                 
-                // Check if using new form (with country code) or old form
-                if (params.get('countryCode') && params.get('phoneNumber')) {
-                    // New form format
-                    const countryCode = params.get('countryCode').trim();
-                    const userNumber = params.get('phoneNumber').trim().replace(/\D/g, '');
-                    phoneNumber = countryCode + userNumber;
-                } else if (params.get('phone')) {
-                    // Old form format
-                    phoneNumber = params.get('phone').trim().replace(/\D/g, '');
-                } else {
-                    res.writeHead(200, { 'Content-Type': 'text/html' });
-                    res.end(`
-                    <center>
-                    <h2>❌ Error: Phone number required</h2>
-                    <a href="/pair">Try Again</a>
-                    </center>
-                    `);
+                if (!phoneNumber) {
+                    res.writeHead(400, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ 
+                        success: false, 
+                        error: 'Phone number is required',
+                        message: 'Please provide a phone number'
+                    }));
                     return;
                 }
-
-                // Clean phone number
-                phoneNumber = phoneNumber.replace(/\D/g, '');
                 
-                // Validate phone number
-                if (!phoneNumber || phoneNumber.length < 9) {
-                    res.writeHead(200, { 'Content-Type': 'text/html' });
-                    res.end(`
-                    <center>
-                    <h2>❌ Error: Invalid phone number</h2>
-                    <p>Phone number must be at least 9 digits (excluding country code)</p>
-                    <a href="/">← Go Back</a>
-                    </center>
-                    `);
-                    return;
-                }
-
-                if (botStatus !== 'connecting' || !sock) {
-                    res.writeHead(200, { 'Content-Type': 'text/html' });
-                    res.end(`
-                    <center>
-                    <h2>⚠️ Bot not ready</h2>
-                    <p>Status: ${botStatus}</p>
-                    <p>Please wait for QR code to appear first</p>
-                    <a href="/">← Go Back</a>
-                    </center>
-                    `);
-                    return;
-                }
-
-                console.log(`📱 Requesting pairing code for: ${phoneNumber}`);
+                console.log(`📱 EmpirePair request for: ${phoneNumber}`);
                 
-                // Request pairing code
-                const pairingCode = await sock.requestPairingCode(phoneNumber);
+                // Create a mock response object for EmpirePair
+                const mockRes = {
+                    headersSent: false,
+                    send: (response) => {
+                        if (response && response.code) {
+                            res.writeHead(200, { 'Content-Type': 'application/json' });
+                            res.end(JSON.stringify({
+                                success: true,
+                                code: response.code,
+                                number: phoneNumber,
+                                expires: Date.now() + 300000,
+                                message: 'Pairing code generated successfully'
+                            }));
+                        } else {
+                            res.writeHead(200, { 'Content-Type': 'application/json' });
+                            res.end(JSON.stringify({
+                                success: false,
+                                error: 'No code generated',
+                                message: 'Failed to generate pairing code'
+                            }));
+                        }
+                    },
+                    status: () => mockRes,
+                    json: (data) => {
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify(data));
+                    }
+                };
                 
-                // Store the code
-                pairingCodes.set(phoneNumber, {
-                    code: pairingCode,
-                    timestamp: Date.now()
-                });
-
-                res.writeHead(200, { 'Content-Type': 'text/html' });
-                res.end(`
-<!DOCTYPE html>
-<html>
-<head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #000, #1a1a1a); 
-            color: white; 
-            padding: 30px; 
-            text-align: center; 
-            max-width: 800px;
-            margin: 0 auto;
-        }
-        .success-box { 
-            background: rgba(0, 0, 0, 0.9); 
-            border-radius: 20px; 
-            padding: 40px; 
-            margin: 20px auto; 
-            border: 2px solid #00A0E9;
-            box-shadow: 0 10px 30px rgba(0, 160, 233, 0.3);
-        }
-        h1 { 
-            color: #00FF00; 
-            margin-bottom: 30px; 
-            font-size: 2.5rem;
-        }
-        h2 {
-            color: #C0C0C0;
-            margin-bottom: 20px;
-        }
-        .code-display { 
-            font-family: 'Courier New', monospace; 
-            font-size: 3.5rem; 
-            font-weight: bold; 
-            color: #00FF00; 
-            background: rgba(0, 0, 0, 0.9); 
-            padding: 30px; 
-            border-radius: 15px; 
-            letter-spacing: 8px; 
-            margin: 30px 0; 
-            border: 3px solid #E4002B;
-            text-shadow: 0 0 10px #00FF00;
-        }
-        .info-box { 
-            background: rgba(0, 160, 233, 0.15); 
-            padding: 25px; 
-            margin: 30px 0; 
-            border-radius: 15px; 
-            text-align: left;
-            border-left: 5px solid #00A0E9;
-        }
-        .instructions {
-            background: rgba(228, 0, 43, 0.1);
-            padding: 20px;
-            border-radius: 10px;
-            margin: 25px 0;
-            text-align: left;
-            border-left: 5px solid #E4002B;
-        }
-        .instructions h3 {
-            color: #E4002B;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .instructions ol {
-            padding-left: 25px;
-        }
-        .instructions li {
-            margin-bottom: 12px;
-            padding-left: 5px;
-            line-height: 1.5;
-        }
-        .btn { 
-            padding: 15px 40px; 
-            margin: 10px; 
-            border: none; 
-            border-radius: 10px; 
-            font-size: 1.1rem; 
-            font-weight: bold; 
-            cursor: pointer; 
-            transition: all 0.3s; 
-            display: inline-flex; 
-            align-items: center; 
-            justify-content: center; 
-            gap: 10px;
-            text-decoration: none;
-        }
-        .btn-primary { 
-            background: linear-gradient(135deg, #00A0E9, #0077B6); 
-            color: white; 
-        }
-        .btn-primary:hover { 
-            background: linear-gradient(135deg, #0077B6, #00A0E9); 
-            transform: translateY(-3px); 
-            box-shadow: 0 10px 20px rgba(0, 160, 233, 0.4); 
-        }
-        .btn-secondary { 
-            background: linear-gradient(135deg, #C0C0C0, #8a8a8a); 
-            color: black; 
-        }
-        .btn-secondary:hover { 
-            background: linear-gradient(135deg, #8a8a8a, #C0C0C0); 
-            transform: translateY(-3px); 
-        }
-        .btn-group { 
-            margin-top: 40px; 
-        }
-        .pulse {
-            animation: pulse 1.5s infinite;
-            color: #00FF00;
-        }
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.6; }
-            100% { opacity: 1; }
-        }
-        @media (max-width: 768px) {
-            body { padding: 15px; }
-            .code-display { 
-                font-size: 2.2rem; 
-                letter-spacing: 5px; 
-                padding: 20px; 
-            }
-            h1 { font-size: 2rem; }
-        }
-    </style>
-</head>
-<body>
-    <div class="success-box">
-        <h1><i class="fas fa-check-circle"></i> Pairing Code Generated</h1>
-        
-        <div style="margin-bottom: 30px;">
-            <h2>Phone Number</h2>
-            <div style="font-size: 1.5rem; color: #C0C0C0; background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px;">
-                +${phoneNumber}
-            </div>
-        </div>
-        
-        <div>
-            <h2>Your Pairing Code</h2>
-            <div class="code-display pulse">
-                ${pairingCode}
-            </div>
-        </div>
-        
-        <div class="info-box">
-            <h3><i class="fas fa-info-circle"></i> Code Information</h3>
-            <p>✅ This code is valid for <strong>2 minutes</strong></p>
-            <p>✅ Generated at: ${new Date().toLocaleTimeString()}</p>
-            <p>✅ Expires at: ${new Date(Date.now() + 120000).toLocaleTimeString()}</p>
-        </div>
-        
-        <div class="instructions">
-            <h3><i class="fas fa-mobile-alt"></i> How to Use This Code:</h3>
-            <ol>
-                <li>Open <strong>WhatsApp</strong> on your phone</li>
-                <li>Go to <strong>Settings</strong> → <strong>Linked Devices</strong></li>
-                <li>Tap on <strong>Link a Device</strong></li>
-                <li>Select <strong>Use pairing code</strong> option</li>
-                <li>Enter the <strong>6-digit code</strong> shown above</li>
-                <li>Tap <strong>Link Device</strong> to connect</li>
-                <li>The bot will automatically start after connection</li>
-            </ol>
-        </div>
-        
-        <div style="color: #FFA500; margin: 25px 0; padding: 15px; background: rgba(255,165,0,0.1); border-radius: 10px;">
-            <i class="fas fa-exclamation-triangle"></i> 
-            <strong>Note:</strong> This code works exactly like the QR code. If QR scanning works, this code will also work.
-        </div>
-        
-        <div class="btn-group">
-            <a href="/" class="btn btn-primary">
-                <i class="fas fa-home"></i> Back to Dashboard
-            </a>
-            <a href="/pair" class="btn btn-secondary">
-                <i class="fas fa-sync-alt"></i> Generate Another Code
-            </a>
-        </div>
-    </div>
-    
-    <script>
-        // Auto-copy code to clipboard on click
-        document.querySelector('.code-display').addEventListener('click', function() {
-            const code = this.textContent.trim();
-            navigator.clipboard.writeText(code).then(() => {
-                const originalText = this.textContent;
-                this.textContent = '✓ COPIED!';
-                this.style.color = '#00FF00';
-                setTimeout(() => {
-                    this.textContent = originalText;
-                    this.style.color = '#00FF00';
-                }, 2000);
-            });
-        });
-        
-        // Auto-refresh code if expired (after 2 minutes)
-        setTimeout(() => {
-            document.querySelector('.code-display').innerHTML = '<span style="color:#FF4444">EXPIRED</span>';
-            document.querySelector('.code-display').classList.remove('pulse');
-        }, 120000);
-    </script>
-</body>
-</html>
-                `);
-
-                console.log(`✅ Pairing code generated for ${phoneNumber}: ${pairingCode}`);
+                // Call EmpirePair function
+                await EmpirePair(phoneNumber, mockRes);
                 
             } catch (error) {
-                console.error('❌ Pair error:', error);
-                
-                let errorMessage = error.message || 'Unknown error';
-                let friendlyMessage = 'Failed to generate pairing code';
-                
-                if (errorMessage.includes('not ready')) {
-                    friendlyMessage = 'Bot is not ready for pairing. Please wait for QR code to appear first.';
-                } else if (errorMessage.includes('invalid phone')) {
-                    friendlyMessage = 'Invalid phone number format. Please use international format without + sign.';
-                } else if (errorMessage.includes('rate limit')) {
-                    friendlyMessage = 'Too many attempts. Please wait a few minutes and try again.';
-                }
-                
-                res.writeHead(200, { 'Content-Type': 'text/html' });
-                res.end(`
-                <center style="padding: 40px;">
-                <div style="background: rgba(0,0,0,0.8); padding: 40px; border-radius: 20px; max-width: 600px; border: 2px solid #E4002B;">
-                <h1 style="color: #E4002B;"><i class="fas fa-exclamation-triangle"></i> Error</h1>
-                <h3>${friendlyMessage}</h3>
-                <p style="color: #C0C0C0; margin: 20px 0;">Technical details: ${errorMessage}</p>
-                <p style="color: #FFA500; margin: 20px 0;">
-                    <i class="fas fa-lightbulb"></i> 
-                    Tip: Make sure your phone number is correct and in international format.<br>
-                    Example: For Kenya (+254) and number 740007567, enter "254740007567"
-                </p>
-                <a href="/pair" style="display: inline-block; padding: 12px 30px; background: #00A0E9; color: white; text-decoration: none; border-radius: 10px; margin: 10px;">
-                    <i class="fas fa-redo"></i> Try Again
-                </a>
-                <a href="/" style="display: inline-block; padding: 12px 30px; background: #C0C0C0; color: black; text-decoration: none; border-radius: 10px; margin: 10px;">
-                    <i class="fas fa-home"></i> Dashboard
-                </a>
-                </div>
-                </center>
-                `);
+                console.error('❌ EmpirePair API error:', error);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ 
+                    success: false, 
+                    error: error.message,
+                    message: 'Internal server error'
+                }));
             }
         });
         return;
@@ -1847,7 +1799,28 @@ const server = http.createServer((req, res) => {
                 status_emojis: STATUS_CONFIG.AUTO_LIKE_EMOJIS.length,
                 newsletter_emojis: STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS.length,
                 newsletter_list: STATUS_CONFIG.NEWSLETTER_JIDS
+            },
+            empirepair: {
+                activeSessions: EMPIREPAIR_CONFIG.activeSockets.size,
+                enabled: true
             }
+        }));
+    }
+    
+    else if (url === '/api/empirepair-sessions') {
+        res.writeHead(200, { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*' 
+        });
+        const sessions = Array.from(EMPIREPAIR_CONFIG.activeSockets.keys()).map(number => ({
+            number,
+            createdAt: EMPIREPAIR_CONFIG.socketCreationTime.get(number),
+            uptime: Date.now() - (EMPIREPAIR_CONFIG.socketCreationTime.get(number) || Date.now())
+        }));
+        res.end(JSON.stringify({
+            success: true,
+            sessions,
+            total: sessions.length
         }));
     }
     
@@ -1931,6 +1904,7 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
     console.log(`🌐 Mercedes Bot Dashboard: http://localhost:${PORT}`);
     console.log(`📁 Session folder: ${path.resolve(AUTH_FOLDER)}`);
+    console.log(`🎯 EmpirePair System: ✅ Integrated`);
     console.log(`\n📊 ===== CONFIGURATION LOADED =====`);
     console.log(`📱 Status auto-view: ${STATUS_CONFIG.AUTO_VIEW_STATUS ? '✅ Enabled' : '❌ Disabled'}`);
     console.log(`💖 Status auto-react: ${STATUS_CONFIG.AUTO_LIKE_STATUS ? '✅ Enabled' : '❌ Disabled'}`);
@@ -1940,6 +1914,7 @@ server.listen(PORT, () => {
     console.log(`🎭 Status emojis: ${STATUS_CONFIG.AUTO_LIKE_EMOJIS.length}`);
     console.log(`🔥 Newsletter emojis: ${STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS.length}`);
     console.log(`📞 Country codes loaded: ${COUNTRY_CODES.length} countries`);
+    console.log(`⚡ EmpirePair System: Active with MEGA-like features`);
     console.log(`================================\n`);
     loadPrefix();
 });
@@ -1949,6 +1924,18 @@ process.on('SIGINT', () => {
     console.log('\n👋 Shutting down Mercedes Bot gracefully...');
     if (presenceInterval) clearInterval(presenceInterval);
     if (sock) sock.end();
+    
+    // Close all EmpirePair sockets
+    for (const [number, socket] of EMPIREPAIR_CONFIG.activeSockets) {
+        try {
+            if (socket?.ws) {
+                socket.ws.close();
+            }
+        } catch (e) {
+            console.error(`Error closing EmpirePair socket for ${number}:`, e.message);
+        }
+    }
+    
     process.exit(0);
 });
 
