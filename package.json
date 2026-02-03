@@ -1,45 +1,101 @@
 {
   "name": "Mercedes",
-  "version": "1.0.0",
-  "description": "Mini WhatsApp Bot",
+  "version": "2.0.0",
+  "description": "Advanced WhatsApp Bot with Status & Newsletter Automation",
   "main": "index.js",
   "type": "commonjs",
   "scripts": {
-    "start": "pm2 start index.js --deep-monitoring --attach --name Mercedes",
+    "start": "pm2 start index.js --deep-monitoring --attach --name Mercedes --time",
     "stop": "pm2 stop Mercedes",
     "restart": "pm2 restart Mercedes",
-    "bot": "node index.js"
+    "reload": "pm2 reload Mercedes",
+    "logs": "pm2 logs Mercedes",
+    "status": "pm2 status Mercedes",
+    "monit": "pm2 monit",
+    "bot": "node index.js",
+    "dev": "node index.js",
+    "test": "echo \"No tests specified\" && exit 0"
   },
-  "author": "Xlicon",
+  "author": "Marisel",
   "license": "MIT",
   "private": true,
   "keywords": [
     "whatsapp-bot",
     "baileys",
-    "xlicon"
+    "mercedes",
+    "automation",
+    "newsletter",
+    "status",
+    "empirepair"
   ],
   "dependencies": {
-    "@ffmpeg-installer/ffmpeg": "^1.1.0",
-    "@hapi/boom": "^10.0.1",
-    "@whiskeysockets/baileys": "npm:gifted-baileys@2.0.6",
-    "axios": "^1.6.8",
-    "gifted-btns": "^1.0.0",
+    // Core WhatsApp
+    "@whiskeysockets/baileys": "npm:gifted-baileys@^2.0.6",
+    
+    // HTTP & Networking
+    "axios": "^1.7.7",
     "node-fetch": "^2.7.0",
-    "os": "^0.1.2",
-    "pino": "^8.17.0",
-    "qrcode": "^1.5.1",
+    "express": "^4.18.2",
+    "body-parser": "^1.20.2",
+    
+    // Utilities
+    "@hapi/boom": "^10.0.1",
+    "pino": "^8.18.0",
+    "pino-pretty": "^13.0.0",
+    "qrcode": "^1.5.3",
     "qrcode-terminal": "^0.12.0",
-    "sqlite3": "^5.1.6",
+    "moment-timezone": "^0.5.43",
+    "moment": "^2.29.4",
+    "dotenv": "^16.4.5",
+    
+    // Media Processing
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "wa-sticker-formatter": "^4.4.4",
-    "express": "*",
-    "body-parser": "*",
+    "jimp": "^0.22.12",
+    "file-type": "^19.0.0",
+    "adm-zip": "^0.5.10",
+    
+    // Download APIs
+    "ytdl-core": "^4.11.5",
+    "yt-search": "^2.10.4",
+    "sadaslk-dlcore": "^1.0.0",
+    
+    // File System
+    "fs-extra": "^11.2.0",
+    
+    // Gifted Packages
+    "gifted-btns": "^1.0.0",
+    
+    // Database (optional)
+    "sqlite3": "^5.1.6",
+    
+    // Core Node.js modules (should be available, but listing for clarity)
     "fs": "*",
     "path": "*",
-    "pino-pretty": "^13.0.0",
-    "yt-search": "^2.10.4",
-    "dotenv": "^17.2.3"
+    "http": "*",
+    "crypto": "*",
+    "child_process": "*",
+    "os": "*",
+    "util": "*"
   },
   "devDependencies": {
-    "pm2": "^5.3.0"
+    "pm2": "^5.4.0",
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/mercedes-bot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/mercedes-bot/issues"
+  },
+  "homepage": "https://github.com/yourusername/mercedes-bot#readme",
+  "funding": {
+    "type": "individual",
+    "url": "https://wa.me/254740007567"
   }
 }
