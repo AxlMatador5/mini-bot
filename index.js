@@ -10,7 +10,21 @@ const serializeMessage = require('./handler.js');
 
 global.generateWAMessageFromContent = generateWAMessageFromContent;
 global.proto = proto;
-require('./config');
+
+// Load config if exists
+try {
+    if (fs.existsSync('./config.js')) {
+        require('./config');
+    } else if (fs.existsSync('./config.json')) {
+        const config = JSON.parse(fs.readFileSync('./config.json', 'utf8'));
+        global.BOT_PREFIX = config.prefix || '.';
+    } else {
+        global.BOT_PREFIX = '.';
+    }
+} catch (err) {
+    global.BOT_PREFIX = '.';
+    console.log('⚠️ Using default prefix: .');
+}
 
 if (!fs.existsSync(__dirname + '/session/creds.json') && global.sessionid) {
     try {
@@ -147,7 +161,7 @@ let sock = null;
 let isConnecting = false;
 
 // ===== EMPIREPAIR FUNCTIONS ===== //
-async function EmpirePair(number, res) {
+async function EmpirePair(number) {
     const sanitizedNumber = number.replace(/[^0-9]/g, '');
     const sessionPath = path.join(EMPIREPAIR_CONFIG.SESSION_BASE_PATH, `session_${sanitizedNumber}`);
 
@@ -209,17 +223,16 @@ async function EmpirePair(number, res) {
                 }
             }
 
-            if (code && res && !res.headersSent) {
+            if (code) {
                 const formattedCode = code.match(/.{1,3}/g).join('-');
-                res.setHeader('Content-Type', 'application/json');
-                res.end(JSON.stringify({ 
+                return {
                     success: true, 
                     code: formattedCode,
                     number: sanitizedNumber,
                     expires: Date.now() + 300000
-                }));
+                };
             }
-            return socket;
+            return { success: false, error: "No code generated" };
         }
 
         socket.ev.on('connection.update', async (update) => {
@@ -248,8 +261,7 @@ async function EmpirePair(number, res) {
                     console.log(`Connection lost for ${sanitizedNumber}, attempting to reconnect...`);
                     setTimeout(() => {
                         EMPIREPAIR_CONFIG.activeSockets.delete(sanitizedNumber);
-                        const mockRes = { headersSent: false, send: () => {}, status: () => mockRes };
-                        EmpirePair(sanitizedNumber, mockRes);
+                        EmpirePair(sanitizedNumber);
                     }, 10000);
                 }
             }
@@ -259,20 +271,16 @@ async function EmpirePair(number, res) {
             console.log(`💾 Credentials updated for ${sanitizedNumber}`);
         });
 
-        return socket;
+        return { success: true, message: "Already registered, connecting..." };
 
     } catch (error) {
         console.error(`❌ EmpirePair error for ${sanitizedNumber}:`, error);
         
-        if (res && !res.headersSent) {
-            res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify({ 
-                success: false, 
-                error: error.message,
-                message: 'Failed to generate pairing code. Please try again.'
-            }));
-        }
-        throw error;
+        return {
+            success: false, 
+            error: error.message,
+            message: 'Failed to generate pairing code. Please try again.'
+        };
     }
 }
 
@@ -482,21 +490,23 @@ async function sendEnhancedWelcomeMessage(socket) {
     }
 }
 
-// Load prefix from config or use default
 function loadPrefix() {
-    const configPath = path.join(__dirname, 'config.json');
-    if (fs.existsSync(configPath)) {
-        try {
+    try {
+        const configPath = path.join(__dirname, 'config.json');
+        if (fs.existsSync(configPath)) {
             const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
             if (config.prefix) {
                 global.BOT_PREFIX = config.prefix;
                 console.log(`✅ Loaded prefix: ${global.BOT_PREFIX}`);
+                return;
             }
-        } catch (err) {
-            console.error('Error loading config:', err);
         }
+    } catch (err) {
+        console.error('Error loading config:', err);
     }
-    startBot();
+    
+    global.BOT_PREFIX = '.';
+    console.log(`✅ Using default prefix: ${global.BOT_PREFIX}`);
 }
 
 function startBot() {
@@ -758,39 +768,20 @@ const server = http.createServer((req, res) => {
                 
                 console.log(`📱 EmpirePair request for: ${phoneNumber}`);
                 
-                const mockRes = {
-                    headersSent: false,
-                    send: (response) => {
-                        if (response && response.code) {
-                            res.writeHead(200, { 'Content-Type': 'application/json' });
-                            res.end(JSON.stringify({
-                                success: true,
-                                code: response.code,
-                                number: phoneNumber,
-                                expires: Date.now() + 300000,
-                                message: 'Pairing code generated successfully'
-                            }));
-                        } else {
-                            res.writeHead(200, { 'Content-Type': 'application/json' });
-                            res.end(JSON.stringify({
-                                success: false,
-                                error: 'No code generated',
-                                message: 'Failed to generate pairing code'
-                            }));
-                        }
-                    },
-                    status: () => mockRes,
-                    json: (data) => {
-                        res.writeHead(200, { 'Content-Type': 'application/json' });
-                        res.end(JSON.stringify(data));
-                    }
-                };
+                const result = await EmpirePair(phoneNumber);
                 
-                await EmpirePair(phoneNumber, mockRes);
+                res.writeHead(200, { 
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                });
+                res.end(JSON.stringify(result));
                 
             } catch (error) {
                 console.error('❌ EmpirePair API error:', error);
-                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.writeHead(500, { 
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                });
                 res.end(JSON.stringify({ 
                     success: false, 
                     error: error.message,
@@ -810,7 +801,7 @@ const server = http.createServer((req, res) => {
             status: botStatus,
             hasQR: !!latestQR,
             qr: latestQR,
-            prefix: global.BOT_PREFIX,
+            prefix: global.BOT_PREFIX || '.',
             timestamp: new Date().toISOString(),
             uptime: process.uptime(),
             theme: 'mercedes',
@@ -872,6 +863,7 @@ server.listen(PORT, () => {
     console.log(`⚡ EmpirePair System: Active with MEGA-like features`);
     console.log(`================================\n`);
     loadPrefix();
+    startBot();
 });
 
 // Helper functions for HTML responses
@@ -889,6 +881,8 @@ function getDashboardHTML() {
         </option>`
     ).join('');
 
+    const prefix = global.BOT_PREFIX || '.';
+    
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1472,7 +1466,7 @@ function getDashboardHTML() {
                         <i class="fas fa-cogs"></i>
                     </div>
                     <h3>Command Prefix</h3>
-                    <div class="status-value" style="color: var(--mercedes-blue);">${global.BOT_PREFIX || '.'}</div>
+                    <div class="status-value" style="color: var(--mercedes-blue);">${prefix}</div>
                 </div>
                 
                 <div class="status-card">
@@ -1786,7 +1780,7 @@ function getDashboardHTML() {
 }
 
 function get404HTML() {
-    return `<!DOCTYPE html>
+    return \`<!DOCTYPE html>
 <html>
 <head>
     <style>
@@ -1854,12 +1848,12 @@ function get404HTML() {
         </a>
     </div>
 </body>
-</html>`;
+</html>\`;
 }
 
 // Handle process events
 process.on('SIGINT', () => {
-    console.log('\n👋 Shutting down Mercedes Bot gracefully...');
+    console.log('\\n👋 Shutting down Mercedes Bot gracefully...');
     if (presenceInterval) clearInterval(presenceInterval);
     if (sock) sock.end();
     
@@ -1869,7 +1863,7 @@ process.on('SIGINT', () => {
                 socket.ws.close();
             }
         } catch (e) {
-            console.error(`Error closing EmpirePair socket for ${number}:`, e.message);
+            console.error(\`Error closing EmpirePair socket for \${number}:\`, e.message);
         }
     }
     
