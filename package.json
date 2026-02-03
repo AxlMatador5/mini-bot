@@ -29,54 +29,30 @@
     "empirepair"
   ],
   "dependencies": {
-    // Core WhatsApp
-    "@whiskeysockets/baileys": "npm:gifted-baileys@^2.0.6",
-    
-    // HTTP & Networking
-    "axios": "^1.7.7",
-    "node-fetch": "^2.7.0",
-    "express": "^4.18.2",
-    "body-parser": "^1.20.2",
-    
-    // Utilities
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@hapi/boom": "^10.0.1",
+    "@whiskeysockets/baileys": "npm:gifted-baileys@^2.0.6",
+    "adm-zip": "^0.5.10",
+    "axios": "^1.7.7",
+    "body-parser": "^1.20.2",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.2",
+    "file-type": "^19.0.0",
+    "fs-extra": "^11.2.0",
+    "gifted-btns": "^1.0.0",
+    "jimp": "^0.22.12",
+    "moment": "^2.29.4",
+    "moment-timezone": "^0.5.43",
+    "node-fetch": "^2.7.0",
     "pino": "^8.18.0",
     "pino-pretty": "^13.0.0",
     "qrcode": "^1.5.3",
     "qrcode-terminal": "^0.12.0",
-    "moment-timezone": "^0.5.43",
-    "moment": "^2.29.4",
-    "dotenv": "^16.4.5",
-    
-    // Media Processing
-    "@ffmpeg-installer/ffmpeg": "^1.1.0",
-    "wa-sticker-formatter": "^4.4.4",
-    "jimp": "^0.22.12",
-    "file-type": "^19.0.0",
-    "adm-zip": "^0.5.10",
-    
-    // Download APIs
-    "ytdl-core": "^4.11.5",
-    "yt-search": "^2.10.4",
     "sadaslk-dlcore": "^1.0.0",
-    
-    // File System
-    "fs-extra": "^11.2.0",
-    
-    // Gifted Packages
-    "gifted-btns": "^1.0.0",
-    
-    // Database (optional)
     "sqlite3": "^5.1.6",
-    
-    // Core Node.js modules (should be available, but listing for clarity)
-    "fs": "*",
-    "path": "*",
-    "http": "*",
-    "crypto": "*",
-    "child_process": "*",
-    "os": "*",
-    "util": "*"
+    "wa-sticker-formatter": "^4.4.4",
+    "yt-search": "^2.10.4",
+    "ytdl-core": "^4.11.5"
   },
   "devDependencies": {
     "pm2": "^5.4.0",
