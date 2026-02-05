@@ -3,10 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Multi-Session WhatsApp Bot</title>
+    <title>Mercedes Bot - Cyberpunk Dashboard</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --cyber-blue: #00f3ff;
+            --cyber-pink: #ff00ff;
+            --cyber-green: #00ff9d;
+            --cyber-purple: #9d00ff;
+            --cyber-dark: #0a0a0f;
+            --cyber-gray: #1a1a2e;
+            --cyber-light: #e6e6ff;
+            --grid-color: rgba(0, 243, 255, 0.1);
+            --glow-blue: 0 0 15px var(--cyber-blue), 0 0 30px var(--cyber-blue);
+            --glow-pink: 0 0 15px var(--cyber-pink), 0 0 30px var(--cyber-pink);
+            --glow-green: 0 0 15px var(--cyber-green), 0 0 30px var(--cyber-green);
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -14,439 +27,868 @@
         }
 
         body {
-            font-family: 'Inter', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Segoe UI', 'Courier New', monospace;
+            background-color: var(--cyber-dark);
+            color: var(--cyber-light);
+            overflow-x: hidden;
             min-height: 100vh;
-            padding: 20px;
+            background-image: 
+                linear-gradient(to bottom, transparent 95%, var(--grid-color) 100%),
+                linear-gradient(to right, transparent 95%, var(--grid-color) 100%);
+            background-size: 50px 50px;
+            position: relative;
         }
 
+        /* Animated grid overlay */
+        .grid-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(to bottom, transparent 95%, var(--grid-color) 100%),
+                linear-gradient(to right, transparent 95%, var(--grid-color) 100%);
+            background-size: 50px 50px;
+            opacity: 0.1;
+            z-index: -1;
+            pointer-events: none;
+            animation: gridMove 20s linear infinite;
+        }
+
+        @keyframes gridMove {
+            0% { transform: translateY(0) translateX(0); }
+            100% { transform: translateY(50px) translateX(50px); }
+        }
+
+        /* Scanning lines effect */
+        .scan-line {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(to right, 
+                transparent, 
+                var(--cyber-blue), 
+                var(--cyber-green), 
+                var(--cyber-pink), 
+                transparent);
+            z-index: 999;
+            opacity: 0.3;
+            animation: scan 3s linear infinite;
+            box-shadow: var(--glow-blue);
+        }
+
+        @keyframes scan {
+            0% { top: 0%; }
+            100% { top: 100%; }
+        }
+
+        /* Container */
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
+            padding: 20px;
+            position: relative;
+            z-index: 1;
         }
 
+        /* Header */
         .header {
             text-align: center;
-            margin-bottom: 30px;
-            color: white;
+            padding: 40px 20px;
+            margin-bottom: 40px;
+            position: relative;
+            border-bottom: 2px solid var(--cyber-blue);
+            box-shadow: var(--glow-blue);
+            border-radius: 10px;
+            background: rgba(10, 10, 15, 0.8);
+            backdrop-filter: blur(10px);
         }
 
         .header h1 {
-            font-size: 2.5rem;
+            font-size: 3.5rem;
+            background: linear-gradient(45deg, var(--cyber-blue), var(--cyber-green), var(--cyber-pink));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
             margin-bottom: 10px;
-            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            text-shadow: 0 0 10px rgba(0, 243, 255, 0.3);
+            animation: textGlow 3s ease-in-out infinite alternate;
         }
 
-        .header p {
-            font-size: 1.1rem;
-            opacity: 0.9;
+        @keyframes textGlow {
+            0% { text-shadow: 0 0 10px rgba(0, 243, 255, 0.3), 0 0 20px rgba(0, 243, 255, 0.2); }
+            100% { text-shadow: 0 0 20px rgba(0, 243, 255, 0.5), 0 0 40px rgba(0, 243, 255, 0.3), 0 0 60px rgba(0, 243, 255, 0.2); }
         }
 
-        .dashboard {
-            display: grid;
-            grid-template-columns: 1fr 2fr;
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-
-        @media (max-width: 768px) {
-            .dashboard {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        .card {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            transition: transform 0.3s ease;
-        }
-
-        .card:hover {
-            transform: translateY(-5px);
-        }
-
-        .card h2 {
-            color: #333;
+        .header .tagline {
+            font-size: 1.2rem;
+            color: var(--cyber-blue);
             margin-bottom: 20px;
-            font-size: 1.5rem;
-            border-bottom: 2px solid #667eea;
-            padding-bottom: 10px;
+            letter-spacing: 1px;
         }
 
-        /* Sessions List */
-        .sessions-list {
-            max-height: 500px;
-            overflow-y: auto;
-        }
-
-        .session-item {
-            background: #f8f9fa;
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 15px;
-            border-left: 4px solid #667eea;
-            transition: all 0.3s ease;
-        }
-
-        .session-item.active {
-            border-left-color: #4CAF50;
-            background: #e8f5e9;
-        }
-
-        .session-item:hover {
-            transform: translateX(5px);
-        }
-
-        .session-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-
-        .session-id {
-            font-weight: 600;
-            color: #333;
-            font-size: 1.1rem;
-        }
-
-        .session-status {
-            padding: 5px 12px;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            font-weight: 500;
-        }
-
-        .status-connected {
-            background: #4CAF50;
-            color: white;
-        }
-
-        .status-connecting {
-            background: #FF9800;
-            color: white;
-        }
-
-        .status-qr {
-            background: #2196F3;
-            color: white;
-        }
-
-        .status-disconnected {
-            background: #f44336;
-            color: white;
-        }
-
-        .status-error {
-            background: #9C27B0;
-            color: white;
-        }
-
-        .session-details {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 10px;
-        }
-
-        .session-phone {
-            color: #666;
-            font-size: 0.9rem;
-        }
-
-        /* QR Display */
-        .qr-display {
-            text-align: center;
-        }
-
-        .qr-image {
-            width: 250px;
-            height: 250px;
-            border: 10px solid white;
-            border-radius: 10px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-            margin: 20px auto;
-        }
-
-        .qr-instruction {
-            background: #f0f4ff;
-            padding: 15px;
-            border-radius: 10px;
-            margin: 20px 0;
-            text-align: left;
-            color: #555;
-        }
-
-        .qr-instruction i {
-            color: #667eea;
-            margin-right: 10px;
-        }
-
-        /* Buttons */
-        .btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 8px;
-            font-weight: 600;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            transition: all 0.3s ease;
-        }
-
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-        }
-
-        .btn-danger {
-            background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
-        }
-
-        .btn-secondary {
-            background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
-        }
-
-        .btn-sm {
-            padding: 8px 16px;
-            font-size: 0.9rem;
-        }
-
-        .session-actions {
-            display: flex;
-            gap: 10px;
-            margin-top: 15px;
-        }
-
-        .session-actions .btn {
-            flex: 1;
-        }
-
-        /* New Session Form */
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            color: #333;
-            font-weight: 500;
-        }
-
-        .form-group input {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 1rem;
-            transition: border-color 0.3s ease;
-        }
-
-        .form-group input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        /* Stats */
-        .stats {
+        /* Main Stats Grid */
+        .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-top: 30px;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
         }
 
         .stat-card {
-            background: white;
-            border-radius: 10px;
-            padding: 20px;
-            text-align: center;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            background: rgba(26, 26, 46, 0.7);
+            border-radius: 15px;
+            padding: 25px;
+            border: 1px solid var(--cyber-blue);
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
         }
 
-        .stat-card i {
-            font-size: 2rem;
-            color: #667eea;
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--glow-blue);
+            border-color: var(--cyber-green);
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--cyber-blue), transparent);
+            animation: slide 2s linear infinite;
+        }
+
+        @keyframes slide {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+
+        .stat-icon {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+            color: var(--cyber-blue);
+        }
+
+        .stat-card h3 {
+            font-size: 1.2rem;
+            color: var(--cyber-light);
             margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
-        .stat-number {
-            font-size: 2rem;
-            font-weight: 700;
-            color: #333;
-            margin: 10px 0;
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            font-family: 'Courier New', monospace;
+            color: var(--cyber-green);
+            text-shadow: 0 0 10px var(--cyber-green);
         }
 
-        .stat-label {
-            color: #666;
-            font-size: 0.9rem;
-        }
-
-        /* Footer */
-        .footer {
+        /* Connection Status */
+        .connection-status {
             text-align: center;
-            margin-top: 40px;
-            color: white;
-            opacity: 0.8;
-            font-size: 0.9rem;
+            margin: 40px 0;
         }
 
-        /* Animations */
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            padding: 15px 30px;
+            border-radius: 50px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            animation: pulse 2s infinite;
+        }
+
+        .status-connecting {
+            background: rgba(255, 165, 0, 0.2);
+            border: 2px solid orange;
+            color: orange;
+            box-shadow: var(--glow-pink);
+        }
+
+        .status-connected {
+            background: rgba(0, 255, 157, 0.2);
+            border: 2px solid var(--cyber-green);
+            color: var(--cyber-green);
+            box-shadow: var(--glow-green);
+            animation: connectedGlow 1.5s infinite alternate;
+        }
+
+        .status-disconnected {
+            background: rgba(255, 0, 0, 0.2);
+            border: 2px solid red;
+            color: red;
+        }
+
+        @keyframes connectedGlow {
+            0% { box-shadow: 0 0 10px var(--cyber-green), 0 0 20px var(--cyber-green); }
+            100% { box-shadow: 0 0 20px var(--cyber-green), 0 0 40px var(--cyber-green); }
+        }
+
+        /* Data Matrix Effect */
+        .data-matrix {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(30px, 1fr));
+            gap: 5px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            margin: 40px 0;
+            border: 1px solid var(--cyber-blue);
+            overflow: hidden;
+        }
+
+        .matrix-cell {
+            width: 30px;
+            height: 30px;
+            background: rgba(0, 243, 255, 0.1);
+            border-radius: 3px;
+            transition: all 0.3s ease;
+            animation: cellPulse 2s infinite alternate;
+        }
+
+        .matrix-cell.active {
+            background: var(--cyber-green);
+            box-shadow: 0 0 10px var(--cyber-green);
+        }
+
+        @keyframes cellPulse {
+            0% { opacity: 0.1; }
+            100% { opacity: 0.8; }
+        }
+
+        /* QR Code Section */
+        .qr-section {
+            text-align: center;
+            margin: 50px 0;
+            padding: 40px;
+            background: rgba(26, 26, 46, 0.8);
+            border-radius: 20px;
+            border: 2px solid var(--cyber-blue);
+            box-shadow: var(--glow-blue);
+            display: none; /* Hidden by default */
+        }
+
+        .qr-section.active {
+            display: block;
+            animation: fadeIn 0.5s ease;
+        }
+
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(20px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
-        .fade-in {
-            animation: fadeIn 0.5s ease forwards;
-        }
-
-        .status-dot {
+        .qr-container {
             display: inline-block;
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            margin-right: 5px;
-            background: currentColor;
+            padding: 20px;
+            background: white;
+            border-radius: 15px;
+            margin: 20px 0;
+            border: 2px solid var(--cyber-blue);
+            box-shadow: var(--glow-blue);
+            position: relative;
+            overflow: hidden;
         }
 
-        .no-sessions {
+        .qr-container::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, 
+                transparent, 
+                var(--cyber-blue), 
+                transparent);
+            animation: rotate 3s linear infinite;
+            opacity: 0.3;
+        }
+
+        @keyframes rotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        #qrImage {
+            width: 250px;
+            height: 250px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 15px 35px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            position: relative;
+            overflow: hidden;
+            font-family: 'Courier New', monospace;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .btn:hover::before {
+            left: 100%;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, var(--cyber-blue), var(--cyber-purple));
+            color: white;
+            border: 2px solid var(--cyber-blue);
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(45deg, var(--cyber-purple), var(--cyber-blue));
+            box-shadow: var(--glow-blue);
+            transform: translateY(-3px);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(45deg, var(--cyber-gray), #2a2a4a);
+            color: var(--cyber-light);
+            border: 2px solid var(--cyber-pink);
+        }
+
+        .btn-secondary:hover {
+            background: linear-gradient(45deg, #2a2a4a, var(--cyber-gray));
+            box-shadow: var(--glow-pink);
+            transform: translateY(-3px);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin: 30px 0;
+            flex-wrap: wrap;
+        }
+
+        /* Features Grid */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 40px 0;
+        }
+
+        .feature-card {
+            background: rgba(26, 26, 46, 0.7);
+            border-radius: 10px;
+            padding: 20px;
+            border-left: 4px solid var(--cyber-green);
+            transition: all 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateX(5px);
+            border-left-color: var(--cyber-pink);
+            box-shadow: var(--glow-green);
+        }
+
+        .feature-card h4 {
+            color: var(--cyber-blue);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Footer */
+        .footer {
             text-align: center;
-            padding: 40px;
-            color: #666;
+            margin-top: 60px;
+            padding-top: 30px;
+            border-top: 1px solid var(--cyber-blue);
+            color: var(--cyber-light);
+            font-size: 0.9rem;
+            opacity: 0.8;
         }
 
-        .no-sessions i {
-            font-size: 3rem;
-            margin-bottom: 20px;
-            color: #ccc;
+        .footer .data-stream {
+            font-family: 'Courier New', monospace;
+            color: var(--cyber-green);
+            margin: 10px 0;
+            font-size: 0.8rem;
+            animation: dataStream 10s linear infinite;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+
+        @keyframes dataStream {
+            0% { transform: translateX(100%); }
+            100% { transform: translateX(-100%); }
+        }
+
+        /* Loading animation */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid var(--cyber-blue);
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2.5rem;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .btn-group {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .btn {
+                width: 100%;
+                max-width: 300px;
+            }
+            
+            .qr-container img {
+                width: 200px;
+                height: 200px;
+            }
+        }
+
+        /* Terminal effect for stats */
+        .terminal {
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid var(--cyber-green);
+            border-radius: 5px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            color: var(--cyber-green);
+            margin: 10px 0;
+            height: 200px;
+            overflow-y: auto;
+        }
+
+        .terminal-line {
+            margin-bottom: 5px;
+        }
+
+        .terminal-line::before {
+            content: '> ';
+            color: var(--cyber-blue);
         }
     </style>
 </head>
 <body>
+    <!-- Animated grid background -->
+    <div class="grid-overlay"></div>
+    <div class="scan-line"></div>
+
     <div class="container">
+        <!-- Header -->
         <div class="header">
-            <h1><i class="fas fa-robot"></i> Multi-Session WhatsApp Bot</h1>
-            <p>Manage multiple WhatsApp sessions simultaneously</p>
-        </div>
-
-        <div class="stats">
-            <div class="stat-card">
-                <i class="fas fa-plug"></i>
-                <div class="stat-number" id="active-count">0</div>
-                <div class="stat-label">Active Sessions</div>
-            </div>
-            <div class="stat-card">
-                <i class="fas fa-database"></i>
-                <div class="stat-number" id="total-sessions">0</div>
-                <div class="stat-label">Total Sessions</div>
-            </div>
-            <div class="stat-card">
-                <i class="fas fa-qrcode"></i>
-                <div class="stat-number" id="qr-sessions">0</div>
-                <div class="stat-label">QR Ready</div>
-            </div>
-        </div>
-
-        <div class="dashboard">
-            <!-- Left Column: Sessions List & New Session -->
-            <div>
-                <div class="card" style="margin-bottom: 20px;">
-                    <h2><i class="fas fa-plus-circle"></i> Create New Session</h2>
-                    <form id="new-session-form">
-                        <div class="form-group">
-                            <label for="session-id">Session ID (Optional):</label>
-                            <input type="text" id="session-id" placeholder="Leave empty for auto-generate">
-                        </div>
-                        <div class="form-group">
-                            <label for="phone-number">Phone Number (Optional):</label>
-                            <input type="text" id="phone-number" placeholder="e.g., 254740007567">
-                            <small style="color: #666; font-size: 0.85rem;">With country code, without +</small>
-                        </div>
-                        <button type="submit" class="btn" style="width: 100%;">
-                            <i class="fas fa-plus"></i> Create Session
-                        </button>
-                    </form>
-                </div>
-
-                <div class="card sessions-list">
-                    <h2><i class="fas fa-list"></i> Active Sessions</h2>
-                    <div id="sessions-list">
-                        <!-- Sessions will be loaded here -->
-                    </div>
-                </div>
-            </div>
-
-            <!-- Right Column: Session Info & QR -->
-            <div>
-                <div class="card" style="margin-bottom: 20px;">
-                    <h2><i class="fas fa-info-circle"></i> Session Information</h2>
-                    <div id="session-info">
-                        <!-- Session info will be loaded here -->
-                        <div class="no-sessions">
-                            <i class="fas fa-user-circle"></i>
-                            <p>Select a session to view details</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <h2><i class="fas fa-qrcode"></i> QR Code Display</h2>
-                    <div id="qr-container">
-                        <!-- QR code will be displayed here -->
-                        <div class="no-sessions">
-                            <i class="fas fa-qrcode"></i>
-                            <p>Select a session with QR ready status</p>
-                        </div>
-                    </div>
+            <h1><i class="fas fa-robot"></i> MERCEDES BOT</h1>
+            <p class="tagline">CYBERPUNK AUTOMATION SUITE</p>
+            <div class="connection-status">
+                <div id="statusIndicator" class="status-indicator status-disconnected">
+                    <i class="fas fa-power-off"></i> <span id="statusText">DISCONNECTED</span>
                 </div>
             </div>
         </div>
 
+        <!-- Main Stats Grid -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="fas fa-bolt"></i>
+                </div>
+                <h3>Uptime</h3>
+                <div class="stat-value" id="uptime">0s</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="fas fa-server"></i>
+                </div>
+                <h3>Connection</h3>
+                <div class="stat-value" id="connectionType">OFFLINE</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="fas fa-code"></i>
+                </div>
+                <h3>Command Prefix</h3>
+                <div class="stat-value" id="prefix">!</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="fas fa-newspaper"></i>
+                </div>
+                <h3>Newsletters</h3>
+                <div class="stat-value" id="newsletterCount">0</div>
+            </div>
+        </div>
+
+        <!-- Button Group -->
+        <div class="btn-group">
+            <button class="btn btn-primary" id="pairBtn">
+                <i class="fas fa-qrcode"></i> PAIR NOW
+            </button>
+            <button class="btn btn-secondary" id="refreshBtn">
+                <i class="fas fa-sync-alt"></i> REFRESH STATUS
+            </button>
+            <button class="btn btn-secondary" id="viewFeaturesBtn">
+                <i class="fas fa-eye"></i> VIEW FEATURES
+            </button>
+        </div>
+
+        <!-- QR Code Section (Hidden by default) -->
+        <div class="qr-section" id="qrSection">
+            <h2><i class="fas fa-satellite-dish"></i> SCAN QR CODE</h2>
+            <p>Scan with WhatsApp to link your device</p>
+            
+            <div class="qr-container">
+                <img id="qrImage" src="" alt="QR Code">
+            </div>
+            
+            <div class="terminal" id="qrTerminal">
+                <div class="terminal-line">Initializing pairing sequence...</div>
+                <div class="terminal-line">System: Awaiting QR generation</div>
+                <div class="terminal-line">Status: Standby</div>
+            </div>
+            
+            <button class="btn btn-secondary" id="closeQrBtn">
+                <i class="fas fa-times"></i> CLOSE
+            </button>
+        </div>
+
+        <!-- Features Grid -->
+        <div class="features-grid" id="featuresGrid">
+            <!-- Features will be loaded dynamically -->
+        </div>
+
+        <!-- Data Matrix Effect -->
+        <div class="data-matrix" id="dataMatrix">
+            <!-- Matrix cells will be generated by JavaScript -->
+        </div>
+
+        <!-- Terminal Log -->
+        <div class="terminal" id="systemLog">
+            <div class="terminal-line">System boot sequence initiated...</div>
+            <div class="terminal-line">Loading Mercedes Bot v2.0...</div>
+            <div class="terminal-line">Establishing secure connection...</div>
+            <div class="terminal-line">Status: Awaiting authentication</div>
+        </div>
+
+        <!-- Footer -->
         <div class="footer">
-            <p>Multi-Session WhatsApp Bot • Powered by Baileys & Supabase</p>
-            <p style="margin-top: 10px;">
-                <button class="btn-sm" onclick="refreshAll()">
-                    <i class="fas fa-sync-alt"></i> Refresh All
-                </button>
+            <div class="data-stream" id="dataStream">
+                [SYSTEM] MERCEDES BOT v2.0 | CYBERPUNK EDITION | STATUS: <span id="streamStatus">DISCONNECTED</span> | UPTIME: <span id="streamUptime">0s</span> | NEWS: <span id="streamNews">0</span> |
+            </div>
+            <p>
+                <i class="fas fa-copyright"></i> 2024 Mercedes Bot Technologies
+                | <i class="fas fa-shield-alt"></i> Encrypted Session
+                | <i class="fas fa-bolt"></i> Auto-Reconnect Enabled
             </p>
         </div>
     </div>
 
-    <script src="/script.js"></script>
     <script>
-        // Update stats
-        async function updateStats() {
-            try {
-                const response = await fetch('/api/sessions');
-                const data = await response.json();
-                
-                if (data.success) {
-                    const active = data.sessions.filter(s => s.isActive).length;
-                    const qrReady = data.sessions.filter(s => s.status === 'qr_ready').length;
-                    
-                    document.getElementById('active-count').textContent = active;
-                    document.getElementById('total-sessions').textContent = data.sessions.length;
-                    document.getElementById('qr-sessions').textContent = qrReady;
+        // Global variables
+        let refreshInterval;
+        let matrixInterval;
+        let connectionStatus = 'disconnected';
+
+        // Initialize the dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🚀 Mercedes Bot Dashboard Initialized');
+            
+            // Generate data matrix
+            generateDataMatrix();
+            
+            // Load initial status
+            fetchStatus();
+            
+            // Set up event listeners
+            document.getElementById('pairBtn').addEventListener('click', showQRCode);
+            document.getElementById('refreshBtn').addEventListener('click', fetchStatus);
+            document.getElementById('closeQrBtn').addEventListener('click', hideQRCode);
+            document.getElementById('viewFeaturesBtn').addEventListener('click', toggleFeatures);
+            
+            // Start auto-refresh
+            refreshInterval = setInterval(fetchStatus, 5000);
+            
+            // Animate matrix cells
+            matrixInterval = setInterval(animateMatrix, 100);
+        });
+
+        // Generate the data matrix effect
+        function generateDataMatrix() {
+            const matrix = document.getElementById('dataMatrix');
+            matrix.innerHTML = '';
+            
+            // Create 150 cells
+            for (let i = 0; i < 150; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'matrix-cell';
+                if (Math.random() > 0.7) {
+                    cell.classList.add('active');
                 }
-            } catch (error) {
-                console.error('Error updating stats:', error);
+                matrix.appendChild(cell);
             }
         }
-        
-        // Refresh all
-        function refreshAll() {
-            window.location.reload();
+
+        // Animate matrix cells
+        function animateMatrix() {
+            const cells = document.querySelectorAll('.matrix-cell');
+            cells.forEach(cell => {
+                if (Math.random() > 0.8) {
+                    cell.classList.toggle('active');
+                }
+            });
         }
-        
-        // Initialize stats update
-        setInterval(updateStats, 3000);
-        updateStats();
+
+        // Fetch bot status from API
+        async function fetchStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                
+                updateDashboard(data);
+                
+                // Add to system log
+                addToLog(`Status updated: ${data.status.toUpperCase()}`);
+                
+            } catch (error) {
+                console.error('Error fetching status:', error);
+                addToLog(`Error: Could not fetch status`);
+            }
+        }
+
+        // Update dashboard with fetched data
+        function updateDashboard(data) {
+            connectionStatus = data.status;
+            
+            // Update status indicator
+            const statusIndicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+            
+            statusIndicator.className = 'status-indicator';
+            
+            if (data.status === 'connected') {
+                statusIndicator.classList.add('status-connected');
+                statusText.innerHTML = `<i class="fas fa-check-circle"></i> CONNECTED`;
+                
+                // Hide QR section if connected
+                document.getElementById('qrSection').classList.remove('active');
+                
+            } else if (data.status === 'connecting') {
+                statusIndicator.classList.add('status-connecting');
+                statusText.innerHTML = `<i class="fas fa-sync-alt"></i> CONNECTING`;
+                
+            } else {
+                statusIndicator.classList.add('status-disconnected');
+                statusText.innerHTML = `<i class="fas fa-power-off"></i> DISCONNECTED`;
+            }
+            
+            // Update stats
+            document.getElementById('uptime').textContent = formatUptime(data.uptime);
+            document.getElementById('connectionType').textContent = data.status.toUpperCase();
+            document.getElementById('prefix').textContent = data.prefix || '!';
+            document.getElementById('newsletterCount').textContent = data.features?.newsletter_count || '0';
+            
+            // Update data stream
+            document.getElementById('streamStatus').textContent = data.status.toUpperCase();
+            document.getElementById('streamUptime').textContent = formatUptime(data.uptime);
+            document.getElementById('streamNews').textContent = data.features?.newsletter_count || '0';
+            
+            // Update QR code if available
+            if (data.hasQR && data.qr) {
+                document.getElementById('qrImage').src = data.qr;
+                updateQRTerminal('QR Code generated successfully');
+            }
+            
+            // Load features
+            loadFeatures(data.features);
+        }
+
+        // Format uptime
+        function formatUptime(seconds) {
+            if (!seconds) return '0s';
+            
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = Math.floor(seconds % 60);
+            
+            if (days > 0) return `${days}d ${hours}h`;
+            if (hours > 0) return `${hours}h ${minutes}m`;
+            if (minutes > 0) return `${minutes}m ${secs}s`;
+            return `${secs}s`;
+        }
+
+        // Show QR code section
+        function showQRCode() {
+            const qrSection = document.getElementById('qrSection');
+            qrSection.classList.add('active');
+            
+            // Scroll to QR section
+            qrSection.scrollIntoView({ behavior: 'smooth' });
+            
+            // Update terminal
+            updateQRTerminal('Pairing sequence initiated...');
+            updateQRTerminal('Generating QR code...');
+            updateQRTerminal('Ready for scanning');
+            
+            // If already has QR code, show it
+            fetchStatus();
+        }
+
+        // Hide QR code section
+        function hideQRCode() {
+            document.getElementById('qrSection').classList.remove('active');
+        }
+
+        // Update QR terminal
+        function updateQRTerminal(message) {
+            const terminal = document.getElementById('qrTerminal');
+            const line = document.createElement('div');
+            line.className = 'terminal-line';
+            line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            terminal.appendChild(line);
+            
+            // Keep only last 10 lines
+            const lines = terminal.querySelectorAll('.terminal-line');
+            if (lines.length > 10) {
+                terminal.removeChild(lines[0]);
+            }
+            
+            // Scroll to bottom
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        // Load features
+        function loadFeatures(features) {
+            if (!features) return;
+            
+            const featuresGrid = document.getElementById('featuresGrid');
+            featuresGrid.innerHTML = '';
+            
+            const featureList = [
+                {
+                    icon: 'fa-eye',
+                    name: 'Status Auto-View',
+                    status: features.status_auto_view ? 'ACTIVE' : 'INACTIVE',
+                    color: features.status_auto_view ? 'var(--cyber-green)' : 'var(--cyber-pink)'
+                },
+                {
+                    icon: 'fa-heart',
+                    name: 'Status Auto-React',
+                    status: features.status_auto_react ? 'ACTIVE' : 'INACTIVE',
+                    color: features.status_auto_react ? 'var(--cyber-green)' : 'var(--cyber-pink)'
+                },
+                {
+                    icon: 'fa-newspaper',
+                    name: 'Newsletter Auto-Follow',
+                    status: features.newsletter_auto_follow ? 'ACTIVE' : 'INACTIVE',
+                    color: features.newsletter_auto_follow ? 'var(--cyber-green)' : 'var(--cyber-pink)'
+                },
+                {
+                    icon: 'fa-fire',
+                    name: 'Newsletter Auto-React',
+                    status: features.newsletter_auto_react ? 'ACTIVE' : 'INACTIVE',
+                    color: features.newsletter_auto_react ? 'var(--cyber-green)' : 'var(--cyber-pink)'
+                }
+            ];
+            
+            featureList.forEach(feature => {
+                const card = document.createElement('div');
+                card.className = 'feature-card';
+                card.innerHTML = `
+                    <h4><i class="fas ${feature.icon}"></i> ${feature.name}</h4>
+                    <p>Status: <span style="color: ${feature.color}">${feature.status}</span></p>
+                `;
+                featuresGrid.appendChild(card);
+            });
+        }
+
+        // Toggle features visibility
+        function toggleFeatures() {
+            const featuresGrid = document.getElementById('featuresGrid');
+            const currentDisplay = window.getComputedStyle(featuresGrid).display;
+            
+            if (currentDisplay === 'none') {
+                featuresGrid.style.display = 'grid';
+                document.getElementById('viewFeaturesBtn').innerHTML = '<i class="fas fa-eye-slash"></i> HIDE FEATURES';
+            } else {
+                featuresGrid.style.display = 'none';
+                document.getElementById('viewFeaturesBtn').innerHTML = '<i class="fas fa-eye"></i> VIEW FEATURES';
+            }
+        }
+
+        // Add message to system log
+        function addToLog(message) {
+            const log = document.getElementById('systemLog');
+            const line = document.createElement('div');
+            line.className = 'terminal-line';
+            line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            log.appendChild(line);
+            
+            // Keep only last 20 lines
+            const lines = log.querySelectorAll('.terminal-line');
+            if (lines.length > 20) {
+                log.removeChild(lines[0]);
+            }
+            
+            // Scroll to bottom
+            log.scrollTop = log.scrollHeight;
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function() {
+            if (refreshInterval) clearInterval(refreshInterval);
+            if (matrixInterval) clearInterval(matrixInterval);
+        });
     </script>
 </body>
 </html>
