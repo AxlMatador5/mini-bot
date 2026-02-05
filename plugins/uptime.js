@@ -29,24 +29,21 @@ module.exports = {
             const totalMinutes = Math.floor(uptime / 60);
             const totalHours = Math.floor(uptime / 3600);
             
-            const text = `*Mercedes Bot Uptime*\n\n` +
+            const text = `*Performance*\n\n` +
                          `*Running for:* ${formattedTime}\n` +
-                         `*Total Hours:* ${totalHours}h\n` +
-                         `*Total Minutes:* ${totalMinutes}m\n` +
                          `*Server Time:* ${new Date().toLocaleTimeString()}\n` +
-                         `*Date:* ${new Date().toLocaleDateString()}\n\n` +
-                         `✨ _Keep the Fire Bunning!_`;
+                         `*Date:* ${new Date().toLocaleDateString()}\n\n`;
 
             await sendInteractiveMessage(sock, m.from, {
-                title: 'MERCEDES BOT UPTIME',
+                title: 'UPTIME STATUS',
                 text: text,
                 footer: '| made by marisel',
                 interactiveButtons: [
                     {
                         name: 'cta_url',
                         buttonParamsJson: JSON.stringify({
-                            display_text: 'Visit Website',
-                            url: 'https://karenbishop.online'
+                            display_text: 'Visit Channel',
+                            url: 'https://whatsapp.com/channel/0029Vajvy2kEwEjwAKP4SI0x'
                         })
                     },
                     {
