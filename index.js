@@ -133,9 +133,6 @@ async function autoFollowNewsletters(socket) {
 function setupEnhancedHandlers(socket) {
     console.log('📱 Setting up enhanced status & newsletter handlers...');
     
-    // Track newsletter reactions to prevent duplicates
-    const reactedMessages = new Set();
-    
     socket.ev.on('messages.upsert', async ({ messages, type }) => {
         if (type !== 'notify') return;
         
@@ -194,102 +191,63 @@ function setupEnhancedHandlers(socket) {
                 continue;
             }
             
-            // ===== 2. NEWSLETTER AUTO-REACTION (FIXED VERSION) =====
-            if (STATUS_CONFIG.AUTO_REACT_NEWSLETTERS && STATUS_CONFIG.NEWSLETTER_JIDS.includes(messageJid)) {
+            // ===== 2. NEWSLETTER AUTO-REACTION =====
+            if (STATUS_CONFIG.AUTO_REACT_NEWSLETTERS) {
                 try {
-                    console.log(`📰 Newsletter post detected from: ${messageJid}`);
-                    
-                    // Get the correct message ID for newsletter reactions
-                    let messageId = null;
-                    let serverId = null;
-                    
-                    // First priority: newsletterServerId from the message
-                    if (message.newsletterServerId) {
-                        messageId = message.newsletterServerId;
-                        serverId = message.newsletterServerId;
-                    } 
-                    // Second priority: newsletterServerId from message.message
-                    else if (message.message?.newsletterServerId) {
-                        messageId = message.message.newsletterServerId;
-                        serverId = message.message.newsletterServerId;
-                    }
-                    // Third priority: regular message ID
-                    else if (message.key?.id) {
-                        messageId = message.key.id;
-                    }
-                    
-                    if (!messageId) {
-                        console.log('❌ Could not find valid message ID for newsletter reaction');
-                        continue;
-                    }
-                    
-                    // Create unique key for this reaction
-                    const reactionKey = `${messageJid}:${serverId || messageId}`;
-                    
-                    // Skip if already reacted
-                    if (reactedMessages.has(reactionKey)) {
-                        console.log(`📌 Already reacted to this newsletter post: ${reactionKey}`);
-                        continue;
-                    }
-                    
-                    // Get random emoji
-                    const randomEmoji = STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS[
-                        Math.floor(Math.random() * STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS.length)
-                    ];
-                    
-                    console.log(`🎯 Attempting to react to newsletter with ${randomEmoji} (ID: ${messageId}, ServerID: ${serverId || 'N/A'})`);
-                    
-                    // Method 1: Try newsletterReactMessage with serverId
-                    if (serverId) {
-                        try {
-                            console.log(`🔄 Trying newsletterReactMessage with serverId: ${serverId}`);
-                            await socket.newsletterReactMessage(messageJid, serverId.toString(), randomEmoji);
-                            reactedMessages.add(reactionKey);
-                            console.log(`✅ Newsletter reaction sent via newsletterReactMessage: ${randomEmoji}`);
-                            
-                            // Clean up after 1 hour
-                            setTimeout(() => reactedMessages.delete(reactionKey), 3600000);
-                            continue;
-                            
-                        } catch (reactError) {
-                            console.log(`❌ newsletterReactMessage failed: ${reactError.message}`);
+                    // Check if message is from a newsletter we should react to
+                    if (STATUS_CONFIG.NEWSLETTER_JIDS.includes(messageJid)) {
+                        console.log(`📰 Newsletter post detected from: ${messageJid}`);
+                        
+                        // Get message ID
+                        let messageId = null;
+                        
+                        if (message.newsletterServerId) {
+                            messageId = message.newsletterServerId;
+                        } else if (message.key?.id) {
+                            messageId = message.key.id;
+                        } else if (message.message?.newsletterServerId) {
+                            messageId = message.message.newsletterServerId;
                         }
-                    }
-                    
-                    // Method 2: Try sendMessage with react
-                    try {
-                        console.log(`🔄 Trying sendMessage with react`);
-                        await socket.sendMessage(messageJid, {
-                            react: {
-                                text: randomEmoji,
-                                key: {
-                                    remoteJid: messageJid,
-                                    id: messageId,
-                                    fromMe: false
+                        
+                        if (messageId) {
+                            const randomEmoji = STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS[
+                                Math.floor(Math.random() * STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS.length)
+                            ];
+                            
+                            console.log(`🎯 Attempting to react to newsletter with ${randomEmoji} (Message ID: ${messageId})`);
+                            
+                            // Try newsletterReactMessage first
+                            try {
+                                await socket.newsletterReactMessage(
+                                    messageJid,
+                                    messageId.toString(),
+                                    randomEmoji
+                                );
+                                console.log(`✅ Newsletter reaction sent via newsletterReactMessage: ${randomEmoji}`);
+                            } catch (reactError) {
+                                console.log(`❌ newsletterReactMessage failed, trying alternative: ${reactError.message}`);
+                                
+                                // Alternative method
+                                try {
+                                    await socket.sendMessage(messageJid, {
+                                        react: {
+                                            text: randomEmoji,
+                                            key: {
+                                                remoteJid: messageJid,
+                                                id: messageId,
+                                                fromMe: false
+                                            }
+                                        }
+                                    });
+                                    console.log(`✅ Newsletter reaction sent via sendMessage: ${randomEmoji}`);
+                                } catch (altError) {
+                                    console.log(`❌ Alternative reaction failed: ${altError.message}`);
                                 }
                             }
-                        });
-                        reactedMessages.add(reactionKey);
-                        console.log(`✅ Newsletter reaction sent via sendMessage: ${randomEmoji}`);
-                        
-                        // Clean up after 1 hour
-                        setTimeout(() => reactedMessages.delete(reactionKey), 3600000);
-                        
-                    } catch (sendError) {
-                        console.log(`❌ sendMessage react failed: ${sendError.message}`);
-                        
-                        // Method 3: Try sending a text message with emoji (fallback)
-                        try {
-                            console.log(`🔄 Trying fallback text message`);
-                            await socket.sendMessage(messageJid, { 
-                                text: randomEmoji 
-                            });
-                            console.log(`✅ Sent emoji as text message: ${randomEmoji}`);
-                        } catch (textError) {
-                            console.log(`❌ Fallback text message failed: ${textError.message}`);
+                        } else {
+                            console.log('❌ Could not find message ID for newsletter reaction');
                         }
                     }
-                    
                 } catch (error) {
                     console.error('❌ Newsletter reaction error:', error.message);
                 }
@@ -308,34 +266,17 @@ function setupEnhancedHandlers(socket) {
                         
                         let messageId = message.newsletterServerId || message.key?.id;
                         if (messageId) {
-                            const reactionKey = `${messageJid}:${messageId}`;
-                            
-                            // Skip if already reacted
-                            if (reactedMessages.has(reactionKey)) {
-                                console.log(`📌 Already reacted to newsletter event: ${reactionKey}`);
-                                continue;
-                            }
-                            
                             const randomEmoji = STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS[
                                 Math.floor(Math.random() * STATUS_CONFIG.NEWSLETTER_REACT_EMOJIS.length)
                             ];
                             
-                            console.log(`🎯 Attempting to react to newsletter event with ${randomEmoji}`);
-                            
                             try {
-                                // Try newsletterReactMessage first
                                 await socket.newsletterReactMessage(
                                     messageJid,
                                     messageId.toString(),
                                     randomEmoji
                                 );
-                                
-                                reactedMessages.add(reactionKey);
                                 console.log(`✅ Newsletter event reaction sent: ${randomEmoji}`);
-                                
-                                // Clean up after 1 hour
-                                setTimeout(() => reactedMessages.delete(reactionKey), 3600000);
-                                
                             } catch (error) {
                                 console.log(`❌ Newsletter event reaction failed: ${error.message}`);
                             }
@@ -713,6 +654,7 @@ const server = http.createServer((req, res) => {
             uptime: uptime,
             processUptime: Math.floor(process.uptime()),
             connectedSince: connectedSince,
+            theme: 'cyberpunk',
             version: '2.0',
             features: {
                 status_auto_view: STATUS_CONFIG.AUTO_VIEW_STATUS,
@@ -895,6 +837,7 @@ process.on('SIGTERM', () => {
 
 process.on('uncaughtException', (err) => {
     console.error('⚠️ Uncaught Exception:', err);
+    // Don't exit, let the bot try to recover
 });
 
 process.on('unhandledRejection', (reason, promise) => {
